@@ -24,11 +24,6 @@ func (h *Handler) DashboardSummary(w http.ResponseWriter, r *http.Request) {
 		SELECT COUNT(*) FROM products WHERE store_id = $1
 	`, storeID).Scan(&summary.TotalProducts)
 
-	// Low stock count (< 10 units)
-	h.db.Pool().QueryRow(ctx, `
-		SELECT COUNT(*) FROM products WHERE store_id = $1 AND stock < 10
-	`, storeID).Scan(&summary.LowStockCount)
-
 	// Revenue this month
 	firstOfMonth := time.Now().AddDate(0, 0, -time.Now().Day()+1)
 	h.db.Pool().QueryRow(ctx, `

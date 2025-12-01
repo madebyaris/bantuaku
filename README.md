@@ -1,6 +1,6 @@
 # Bantuaku SaaS
 
-**AI-Powered Inventory & Demand Forecasting Platform untuk UMKM Indonesia**
+**AI-Powered Demand Forecasting Platform untuk UMKM Indonesia**
 
 ![Bantuaku](https://img.shields.io/badge/Status-Hackathon%20MVP-purple)
 ![Go](https://img.shields.io/badge/Backend-Go%201.22-00ADD8)
@@ -9,10 +9,10 @@
 
 ## 🎯 Overview
 
-Bantuaku adalah platform SaaS yang membantu UMKM Indonesia mengelola inventory dan membuat keputusan bisnis berbasis data dengan:
+Bantuaku adalah platform SaaS yang membantu UMKM Indonesia membuat keputusan bisnis berbasis data dengan:
 
-- **Forecasting Permintaan** - Prediksi penjualan 30/60/90 hari ke depan
-- **Rekomendasi Restok** - Saran order otomatis berdasarkan data
+- **Forecasting Permintaan** - Prediksi penjualan 30/60/90 hari ke depan berdasarkan data historis
+- **Proyeksi Permintaan** - Rekomendasi proyeksi permintaan produk berdasarkan tren penjualan
 - **Integrasi WooCommerce** - Sinkronisasi produk dan pesanan
 - **AI Assistant** - Tanya jawab bisnis dalam Bahasa Indonesia
 - **Sentiment Analysis** - Pantau sentiment pasar dan social media
@@ -135,7 +135,7 @@ VITE_API_URL=http://localhost:8080
 
 ### Forecasting
 - `GET /api/v1/forecasts/{product_id}` - Get product forecast
-- `GET /api/v1/recommendations` - Get restock recommendations
+- `GET /api/v1/recommendations` - Get demand forecast recommendations
 
 ### AI
 - `POST /api/v1/ai/analyze` - Ask AI assistant

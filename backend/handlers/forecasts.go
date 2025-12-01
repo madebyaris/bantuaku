@@ -16,7 +16,6 @@ import (
 type ForecastResponse struct {
 	models.Forecast
 	ProductName     string       `json:"product_name"`
-	CurrentStock    int          `json:"current_stock"`
 	HistoricalSales []DailySales `json:"historical_sales,omitempty"`
 }
 
@@ -49,10 +48,9 @@ func (h *Handler) GetForecast(w http.ResponseWriter, r *http.Request) {
 
 	// Verify product belongs to store
 	var productName string
-	var currentStock int
 	err = h.db.Pool().QueryRow(r.Context(), `
-		SELECT product_name, stock FROM products WHERE id = $1 AND store_id = $2
-	`, productID, storeID).Scan(&productName, &currentStock)
+		SELECT product_name FROM products WHERE id = $1 AND store_id = $2
+	`, productID, storeID).Scan(&productName)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "Product not found")
 		return
@@ -144,7 +142,6 @@ func (h *Handler) GetForecast(w http.ResponseWriter, r *http.Request) {
 			ExpiresAt:   time.Now().Add(time.Hour),
 		},
 		ProductName:     productName,
-		CurrentStock:    currentStock,
 		HistoricalSales: historicalSales,
 	}
 
@@ -155,7 +152,7 @@ func (h *Handler) GetForecast(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, forecastResp)
 }
 
-// GetRecommendations returns inventory recommendations for all products
+// GetRecommendations returns demand forecast recommendations for all products
 func (h *Handler) GetRecommendations(w http.ResponseWriter, r *http.Request) {
 	storeID := middleware.GetStoreID(r.Context())
 	if storeID == "" {
@@ -165,14 +162,14 @@ func (h *Handler) GetRecommendations(w http.ResponseWriter, r *http.Request) {
 
 	// Get all products with their sales data
 	rows, err := h.db.Pool().Query(r.Context(), `
-		SELECT p.id, p.product_name, p.stock,
+		SELECT p.id, p.product_name,
 			COALESCE(SUM(s.quantity), 0) as total_sales,
 			COUNT(DISTINCT s.sale_date) as days_with_sales
 		FROM products p
 		LEFT JOIN sales_history s ON p.id = s.product_id 
 			AND s.sale_date >= $2
 		WHERE p.store_id = $1
-		GROUP BY p.id, p.product_name, p.stock
+		GROUP BY p.id, p.product_name
 		ORDER BY total_sales DESC
 	`, storeID, time.Now().AddDate(0, 0, -30))
 	if err != nil {
@@ -184,13 +181,13 @@ func (h *Handler) GetRecommendations(w http.ResponseWriter, r *http.Request) {
 	recommendations := []models.Recommendation{}
 	for rows.Next() {
 		var productID, productName string
-		var stock, totalSales, daysWithSales int
+		var totalSales, daysWithSales int
 
-		if rows.Scan(&productID, &productName, &stock, &totalSales, &daysWithSales) != nil {
+		if rows.Scan(&productID, &productName, &totalSales, &daysWithSales) != nil {
 			continue
 		}
 
-		// Calculate recommendation
+		// Calculate projected demand
 		avgDailySales := 0.0
 		if daysWithSales > 0 {
 			avgDailySales = float64(totalSales) / float64(daysWithSales)
@@ -199,43 +196,28 @@ func (h *Handler) GetRecommendations(w http.ResponseWriter, r *http.Request) {
 		// Projected 30-day demand
 		projected30d := int(math.Ceil(avgDailySales * 30))
 
-		// Safety stock (20% buffer)
-		safetyStock := int(math.Ceil(float64(projected30d) * 0.2))
-
-		// Recommended order quantity
-		recommendedQty := projected30d + safetyStock - stock
-		if recommendedQty < 0 {
-			recommendedQty = 0
-		}
-
-		// Determine risk level
+		// Determine risk level based on sales trend
 		var riskLevel, reason string
-		daysOfStock := 0
-		if avgDailySales > 0 {
-			daysOfStock = int(float64(stock) / avgDailySales)
-		}
-
-		if stock <= 0 {
-			riskLevel = "high"
-			reason = "Stok habis! Segera order untuk menghindari kehilangan penjualan."
-		} else if daysOfStock < 7 {
-			riskLevel = "high"
-			reason = fmt.Sprintf("Stok hanya cukup untuk %d hari. Segera order %d unit.", daysOfStock, recommendedQty)
-		} else if daysOfStock < 14 {
-			riskLevel = "medium"
-			reason = fmt.Sprintf("Stok cukup untuk %d hari. Pertimbangkan untuk order %d unit.", daysOfStock, recommendedQty)
-		} else {
+		if projected30d == 0 {
 			riskLevel = "low"
-			reason = fmt.Sprintf("Stok aman untuk %d hari ke depan.", daysOfStock)
+			reason = "Tidak ada proyeksi permintaan berdasarkan data penjualan."
+		} else if projected30d < 10 {
+			riskLevel = "low"
+			reason = fmt.Sprintf("Proyeksi permintaan rendah: %d unit dalam 30 hari ke depan.", projected30d)
+		} else if projected30d < 50 {
+			riskLevel = "medium"
+			reason = fmt.Sprintf("Proyeksi permintaan sedang: %d unit dalam 30 hari ke depan.", projected30d)
+		} else {
+			riskLevel = "high"
+			reason = fmt.Sprintf("Proyeksi permintaan tinggi: %d unit dalam 30 hari ke depan. Pastikan ketersediaan produk.", projected30d)
 		}
 
 		recommendations = append(recommendations, models.Recommendation{
-			ProductID:      productID,
-			ProductName:    productName,
-			CurrentStock:   stock,
-			RecommendedQty: recommendedQty,
-			Reason:         reason,
-			RiskLevel:      riskLevel,
+			ProductID:       productID,
+			ProductName:     productName,
+			ProjectedDemand: projected30d,
+			Reason:          reason,
+			RiskLevel:       riskLevel,
 		})
 	}
 

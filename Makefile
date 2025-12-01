@@ -36,6 +36,9 @@ logs-frontend:
 migrate:
 	$(DOCKER_COMPOSE) exec db psql -U bantuaku -d bantuaku_dev -f /docker-entrypoint-initdb.d/001_init_schema.sql
 
+migrate-remove-stock:
+	$(DOCKER_COMPOSE) exec db psql -U bantuaku -d bantuaku_dev -f /docker-entrypoint-initdb.d/003_remove_stock.sql
+
 seed:
 	$(DOCKER_COMPOSE) exec db psql -U bantuaku -d bantuaku_dev -f /docker-entrypoint-initdb.d/002_seed_demo_data.sql
 

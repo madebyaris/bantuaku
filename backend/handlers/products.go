@@ -16,7 +16,6 @@ type CreateProductRequest struct {
 	Category    string  `json:"category,omitempty"`
 	UnitPrice   float64 `json:"unit_price"`
 	Cost        float64 `json:"cost,omitempty"`
-	Stock       int     `json:"stock"`
 }
 
 // UpdateProductRequest represents a request to update a product
@@ -26,7 +25,6 @@ type UpdateProductRequest struct {
 	Category    string  `json:"category,omitempty"`
 	UnitPrice   float64 `json:"unit_price,omitempty"`
 	Cost        float64 `json:"cost,omitempty"`
-	Stock       int     `json:"stock,omitempty"`
 }
 
 // ListProducts returns all products for the authenticated store
@@ -44,7 +42,7 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
 
 	if category != "" {
 		query = `
-			SELECT id, store_id, product_name, sku, category, unit_price, cost, stock, created_at, updated_at
+			SELECT id, store_id, product_name, sku, category, unit_price, cost, created_at, updated_at
 			FROM products 
 			WHERE store_id = $1 AND category = $2
 			ORDER BY product_name
@@ -52,7 +50,7 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
 		args = []interface{}{storeID, category}
 	} else {
 		query = `
-			SELECT id, store_id, product_name, sku, category, unit_price, cost, stock, created_at, updated_at
+			SELECT id, store_id, product_name, sku, category, unit_price, cost, created_at, updated_at
 			FROM products 
 			WHERE store_id = $1
 			ORDER BY product_name
@@ -70,7 +68,7 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
 	products := []models.Product{}
 	for rows.Next() {
 		var p models.Product
-		err := rows.Scan(&p.ID, &p.StoreID, &p.ProductName, &p.SKU, &p.Category, &p.UnitPrice, &p.Cost, &p.Stock, &p.CreatedAt, &p.UpdatedAt)
+		err := rows.Scan(&p.ID, &p.StoreID, &p.ProductName, &p.SKU, &p.Category, &p.UnitPrice, &p.Cost, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			continue
 		}
@@ -107,9 +105,9 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 
 	_, err := h.db.Pool().Exec(r.Context(), `
-		INSERT INTO products (id, store_id, product_name, sku, category, unit_price, cost, stock, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, productID, storeID, req.ProductName, req.SKU, req.Category, req.UnitPrice, req.Cost, req.Stock, now, now)
+		INSERT INTO products (id, store_id, product_name, sku, category, unit_price, cost, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`, productID, storeID, req.ProductName, req.SKU, req.Category, req.UnitPrice, req.Cost, now, now)
 
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to create product")
@@ -124,7 +122,6 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		Category:    req.Category,
 		UnitPrice:   req.UnitPrice,
 		Cost:        req.Cost,
-		Stock:       req.Stock,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -144,10 +141,10 @@ func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) {
 
 	var p models.Product
 	err := h.db.Pool().QueryRow(r.Context(), `
-		SELECT id, store_id, product_name, sku, category, unit_price, cost, stock, created_at, updated_at
+		SELECT id, store_id, product_name, sku, category, unit_price, cost, created_at, updated_at
 		FROM products
 		WHERE id = $1 AND store_id = $2
-	`, productID, storeID).Scan(&p.ID, &p.StoreID, &p.ProductName, &p.SKU, &p.Category, &p.UnitPrice, &p.Cost, &p.Stock, &p.CreatedAt, &p.UpdatedAt)
+	`, productID, storeID).Scan(&p.ID, &p.StoreID, &p.ProductName, &p.SKU, &p.Category, &p.UnitPrice, &p.Cost, &p.CreatedAt, &p.UpdatedAt)
 
 	if err != nil {
 		respondError(w, http.StatusNotFound, "Product not found")
@@ -181,10 +178,9 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 			category = COALESCE(NULLIF($5, ''), category),
 			unit_price = CASE WHEN $6 > 0 THEN $6 ELSE unit_price END,
 			cost = CASE WHEN $7 > 0 THEN $7 ELSE cost END,
-			stock = CASE WHEN $8 >= 0 THEN $8 ELSE stock END,
-			updated_at = $9
+			updated_at = $8
 		WHERE id = $1 AND store_id = $2
-	`, productID, storeID, req.ProductName, req.SKU, req.Category, req.UnitPrice, req.Cost, req.Stock, time.Now())
+	`, productID, storeID, req.ProductName, req.SKU, req.Category, req.UnitPrice, req.Cost, time.Now())
 
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to update product")
@@ -199,9 +195,9 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	// Fetch and return updated product
 	var p models.Product
 	h.db.Pool().QueryRow(r.Context(), `
-		SELECT id, store_id, product_name, sku, category, unit_price, cost, stock, created_at, updated_at
+		SELECT id, store_id, product_name, sku, category, unit_price, cost, created_at, updated_at
 		FROM products WHERE id = $1
-	`, productID).Scan(&p.ID, &p.StoreID, &p.ProductName, &p.SKU, &p.Category, &p.UnitPrice, &p.Cost, &p.Stock, &p.CreatedAt, &p.UpdatedAt)
+	`, productID).Scan(&p.ID, &p.StoreID, &p.ProductName, &p.SKU, &p.Category, &p.UnitPrice, &p.Cost, &p.CreatedAt, &p.UpdatedAt)
 
 	respondJSON(w, http.StatusOK, p)
 }

@@ -24,7 +24,7 @@ type Store struct {
 	CreatedAt        time.Time `json:"created_at"`
 }
 
-// Product represents a product in inventory
+// Product represents a product catalog item
 type Product struct {
 	ID          string    `json:"id"`
 	StoreID     string    `json:"store_id"`
@@ -33,7 +33,6 @@ type Product struct {
 	Category    string    `json:"category,omitempty"`
 	UnitPrice   float64   `json:"unit_price"`
 	Cost        float64   `json:"cost,omitempty"`
-	Stock       int       `json:"stock"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -65,14 +64,13 @@ type Forecast struct {
 	ExpiresAt   time.Time `json:"expires_at"`
 }
 
-// Recommendation represents an inventory recommendation
+// Recommendation represents a demand forecast recommendation
 type Recommendation struct {
-	ProductID      string `json:"product_id"`
-	ProductName    string `json:"product_name"`
-	CurrentStock   int    `json:"current_stock"`
-	RecommendedQty int    `json:"recommended_qty"`
-	Reason         string `json:"reason"`
-	RiskLevel      string `json:"risk_level"` // low, medium, high
+	ProductID       string `json:"product_id"`
+	ProductName     string `json:"product_name"`
+	ProjectedDemand int    `json:"projected_demand"` // 30-day projected demand
+	Reason          string `json:"reason"`
+	RiskLevel       string `json:"risk_level"` // low, medium, high
 }
 
 // Integration represents an external platform integration
@@ -117,7 +115,6 @@ type MarketTrend struct {
 // DashboardSummary represents the main dashboard KPIs
 type DashboardSummary struct {
 	TotalProducts     int     `json:"total_products"`
-	LowStockCount     int     `json:"low_stock_count"`
 	ForecastAccuracy  float64 `json:"forecast_accuracy"`
 	RevenueThisMonth  float64 `json:"revenue_this_month"`
 	RevenueTrend      float64 `json:"revenue_trend"` // percentage change from last month

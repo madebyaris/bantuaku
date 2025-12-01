@@ -163,7 +163,6 @@ export interface Product {
   category: string
   unit_price: number
   cost: number
-  stock: number
   created_at: string
   updated_at: string
 }
@@ -174,7 +173,6 @@ export interface CreateProductRequest {
   category?: string
   unit_price: number
   cost?: number
-  stock: number
 }
 
 export interface Sale {
@@ -219,15 +217,13 @@ export interface ForecastResponse {
   generated_at: string
   expires_at: string
   product_name: string
-  current_stock: number
   historical_sales: { date: string; quantity: number }[]
 }
 
 export interface Recommendation {
   product_id: string
   product_name: string
-  current_stock: number
-  recommended_qty: number
+  projected_demand: number
   reason: string
   risk_level: string
 }
@@ -262,7 +258,6 @@ export interface AIAnalyzeResponse {
 
 export interface DashboardSummary {
   total_products: number
-  low_stock_count: number
   forecast_accuracy: number
   revenue_this_month: number
   revenue_trend: number

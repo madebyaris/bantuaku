@@ -193,11 +193,10 @@ func (h *Handler) WooCommerceSyncNow(w http.ResponseWriter, r *http.Request) {
 	defer productResp.Body.Close()
 
 	var wooProducts []struct {
-		ID            int64  `json:"id"`
-		Name          string `json:"name"`
-		SKU           string `json:"sku"`
-		Price         string `json:"price"`
-		StockQuantity *int   `json:"stock_quantity"`
+		ID    int64  `json:"id"`
+		Name  string `json:"name"`
+		SKU   string `json:"sku"`
+		Price string `json:"price"`
 	}
 
 	body, _ := io.ReadAll(productResp.Body)
@@ -208,21 +207,15 @@ func (h *Handler) WooCommerceSyncNow(w http.ResponseWriter, r *http.Request) {
 		price := 0.0
 		fmt.Sscanf(wp.Price, "%f", &price)
 
-		stock := 0
-		if wp.StockQuantity != nil {
-			stock = *wp.StockQuantity
-		}
-
 		// Upsert product
 		_, err := h.db.Pool().Exec(r.Context(), `
-			INSERT INTO products (id, store_id, product_name, sku, unit_price, stock, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			INSERT INTO products (id, store_id, product_name, sku, unit_price, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
 			ON CONFLICT (store_id, sku) DO UPDATE SET
 				product_name = EXCLUDED.product_name,
 				unit_price = EXCLUDED.unit_price,
-				stock = EXCLUDED.stock,
 				updated_at = EXCLUDED.updated_at
-		`, uuid.New().String(), storeID, wp.Name, wp.SKU, price, stock, time.Now(), time.Now())
+		`, uuid.New().String(), storeID, wp.Name, wp.SKU, price, time.Now(), time.Now())
 
 		if err == nil {
 			syncedProducts++

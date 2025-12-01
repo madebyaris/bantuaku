@@ -77,7 +77,7 @@ func (h *Handler) AIAnalyze(w http.ResponseWriter, r *http.Request) {
 		} else {
 			answer = resp.Choices[0].Message.Content
 			confidence = 0.85
-			dataSources = []string{"sales_history", "forecasts", "inventory"}
+			dataSources = []string{"sales_history", "forecasts"}
 		}
 	} else {
 		// No API key, use mock response
@@ -101,7 +101,6 @@ func (h *Handler) AIAnalyze(w http.ResponseWriter, r *http.Request) {
 type StoreContext struct {
 	StoreName     string
 	TotalProducts int
-	LowStockItems []string
 	TopProducts   []ProductSummary
 	RecentRevenue float64
 	ForecastData  string
@@ -109,7 +108,6 @@ type StoreContext struct {
 
 type ProductSummary struct {
 	Name        string
-	Stock       int
 	Sales30d    int
 	Forecast30d int
 }
@@ -123,27 +121,13 @@ func (h *Handler) gatherStoreContext(ctx context.Context, storeID string) StoreC
 	// Get total products
 	h.db.Pool().QueryRow(ctx, `SELECT COUNT(*) FROM products WHERE store_id = $1`, storeID).Scan(&sc.TotalProducts)
 
-	// Get low stock items (< 10 units)
-	rows, _ := h.db.Pool().Query(ctx, `
-		SELECT product_name FROM products WHERE store_id = $1 AND stock < 10
-	`, storeID)
-	if rows != nil {
-		defer rows.Close()
-		for rows.Next() {
-			var name string
-			if rows.Scan(&name) == nil {
-				sc.LowStockItems = append(sc.LowStockItems, name)
-			}
-		}
-	}
-
 	// Get top products with sales
 	rows2, _ := h.db.Pool().Query(ctx, `
-		SELECT p.product_name, p.stock, COALESCE(SUM(s.quantity), 0) as sales
+		SELECT p.product_name, COALESCE(SUM(s.quantity), 0) as sales
 		FROM products p
 		LEFT JOIN sales_history s ON p.id = s.product_id AND s.sale_date >= $2
 		WHERE p.store_id = $1
-		GROUP BY p.id, p.product_name, p.stock
+		GROUP BY p.id, p.product_name
 		ORDER BY sales DESC
 		LIMIT 5
 	`, storeID, time.Now().AddDate(0, 0, -30))
@@ -151,7 +135,7 @@ func (h *Handler) gatherStoreContext(ctx context.Context, storeID string) StoreC
 		defer rows2.Close()
 		for rows2.Next() {
 			var ps ProductSummary
-			if rows2.Scan(&ps.Name, &ps.Stock, &ps.Sales30d) == nil {
+			if rows2.Scan(&ps.Name, &ps.Sales30d) == nil {
 				ps.Forecast30d = int(float64(ps.Sales30d) * 1.1) // Simple projection
 				sc.TopProducts = append(sc.TopProducts, ps)
 			}
@@ -169,7 +153,7 @@ func (h *Handler) gatherStoreContext(ctx context.Context, storeID string) StoreC
 }
 
 func buildSystemPrompt() string {
-	return `Kamu adalah Asisten Bantuaku, AI assistant untuk membantu UMKM Indonesia mengelola inventory dan membuat keputusan bisnis yang lebih baik.
+	return `Kamu adalah Asisten Bantuaku, AI assistant untuk membantu UMKM Indonesia membuat keputusan bisnis berbasis data.
 
 Panduan:
 1. SELALU jawab dalam Bahasa Indonesia yang natural dan ramah
@@ -180,9 +164,8 @@ Panduan:
 6. Akhiri dengan satu pertanyaan follow-up untuk membantu lebih lanjut
 
 Konteks: Kamu membantu pemilik UMKM dengan:
-- Forecasting permintaan produk
-- Rekomendasi inventory
-- Analisis penjualan
+- Forecasting permintaan produk berdasarkan data penjualan
+- Analisis penjualan dan tren
 - Insight pasar dan sentiment`
 }
 
@@ -193,14 +176,10 @@ func buildUserPrompt(question string, sc StoreContext) string {
 	sb.WriteString(fmt.Sprintf("Total Produk: %d\n", sc.TotalProducts))
 	sb.WriteString(fmt.Sprintf("Revenue 30 hari: Rp %.0f\n", sc.RecentRevenue))
 
-	if len(sc.LowStockItems) > 0 {
-		sb.WriteString(fmt.Sprintf("Produk stok rendah: %s\n", strings.Join(sc.LowStockItems, ", ")))
-	}
-
 	if len(sc.TopProducts) > 0 {
 		sb.WriteString("\nTop Produk (30 hari terakhir):\n")
 		for _, p := range sc.TopProducts {
-			sb.WriteString(fmt.Sprintf("- %s: Stok %d, Terjual %d, Proyeksi %d\n", p.Name, p.Stock, p.Sales30d, p.Forecast30d))
+			sb.WriteString(fmt.Sprintf("- %s: Terjual %d, Proyeksi 30 hari %d\n", p.Name, p.Sales30d, p.Forecast30d))
 		}
 	}
 
@@ -214,30 +193,24 @@ func generateMockResponse(question string, sc StoreContext) (string, float64, []
 
 	var answer string
 	confidence := 0.75
-	dataSources := []string{"inventory", "sales_history"}
+	dataSources := []string{"sales_history"}
 
-	if strings.Contains(questionLower, "order") || strings.Contains(questionLower, "beli") || strings.Contains(questionLower, "stok") {
-		answer = fmt.Sprintf(`Berdasarkan analisis data toko %s:
+	if strings.Contains(questionLower, "order") || strings.Contains(questionLower, "beli") || strings.Contains(questionLower, "permintaan") {
+		answer = fmt.Sprintf(`Berdasarkan analisis data penjualan toko %s:
 
-**Rekomendasi Order Bulan Depan:**
+**Proyeksi Permintaan Bulan Depan:**
 
 `, sc.StoreName)
 
 		if len(sc.TopProducts) > 0 {
 			for _, p := range sc.TopProducts {
-				recommended := p.Forecast30d - p.Stock
-				if recommended < 0 {
-					recommended = 0
-				}
-				answer += fmt.Sprintf("• **%s**: Order %d unit (stok saat ini: %d, proyeksi kebutuhan: %d)\n", p.Name, recommended, p.Stock, p.Forecast30d)
+				answer += fmt.Sprintf("• **%s**: Proyeksi permintaan %d unit (berdasarkan penjualan 30 hari: %d unit)\n", p.Name, p.Forecast30d, p.Sales30d)
 			}
+		} else {
+			answer += "Belum ada data penjualan yang cukup untuk membuat proyeksi.\n"
 		}
 
-		if len(sc.LowStockItems) > 0 {
-			answer += fmt.Sprintf("\n⚠️ **Perhatian Khusus:**\nProduk dengan stok rendah: %s\n", strings.Join(sc.LowStockItems, ", "))
-		}
-
-		answer += "\nApakah ada produk tertentu yang ingin Anda fokuskan?"
+		answer += "\nApakah ada produk tertentu yang ingin Anda analisis lebih detail?"
 		dataSources = append(dataSources, "forecasts")
 
 	} else if strings.Contains(questionLower, "turun") || strings.Contains(questionLower, "menurun") || strings.Contains(questionLower, "kenapa") {
@@ -246,16 +219,16 @@ func generateMockResponse(question string, sc StoreContext) (string, float64, []
 **Kemungkinan Penyebab:**
 • Faktor musiman - cek apakah ini periode off-season untuk kategori produk Anda
 • Kompetitor - mungkin ada promo dari pesaing
-• Stok rendah - %d produk dengan stok terbatas bisa menyebabkan hilangnya penjualan
+• Perubahan preferensi konsumen - cek tren pasar terkini
 
 **Rekomendasi:**
-1. Review produk dengan stok rendah dan segera restok
+1. Analisis produk yang mengalami penurunan paling signifikan
 2. Pertimbangkan promo untuk produk yang lambat terjual
 3. Cek feedback pelanggan di social media
 
 Revenue 30 hari terakhir: Rp %.0f
 
-Mau saya bantu analisis produk tertentu lebih detail?`, sc.StoreName, len(sc.LowStockItems), sc.RecentRevenue)
+Mau saya bantu analisis produk tertentu lebih detail?`, sc.StoreName, sc.RecentRevenue)
 		dataSources = append(dataSources, "sentiment")
 
 	} else if strings.Contains(questionLower, "trending") || strings.Contains(questionLower, "trend") || strings.Contains(questionLower, "populer") {
@@ -281,15 +254,14 @@ Apakah ada kategori tertentu yang ingin Anda eksplorasi?`, sc.StoreName)
 Berikut ringkasan toko %s:
 • Total produk: %d
 • Revenue 30 hari: Rp %.0f
-• Produk stok rendah: %d item
 
 Saya bisa membantu Anda dengan:
-1. **Rekomendasi order** - "Apa yang harus saya order bulan depan?"
+1. **Proyeksi permintaan** - "Berapa proyeksi permintaan bulan depan?"
 2. **Analisis penjualan** - "Mengapa penjualan turun?"
 3. **Trend pasar** - "Produk apa yang sedang trending?"
-4. **Optimasi inventory** - "Bagaimana mengoptimalkan stok?"
+4. **Rekomendasi bisnis** - "Apa yang harus saya lakukan untuk meningkatkan penjualan?"
 
-Apa yang ingin Anda ketahui lebih lanjut?`, sc.StoreName, sc.TotalProducts, sc.RecentRevenue, len(sc.LowStockItems))
+Apa yang ingin Anda ketahui lebih lanjut?`, sc.StoreName, sc.TotalProducts, sc.RecentRevenue)
 		confidence = 0.6
 	}
 

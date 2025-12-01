@@ -90,24 +90,6 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="card-hover">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Stok Rendah</p>
-                <p className="text-3xl font-bold text-slate-900 mt-1">
-                  {summary?.low_stock_count || 0}
-                </p>
-                {(summary?.low_stock_count || 0) > 0 && (
-                  <p className="text-xs text-red-600 mt-1">Perlu restok!</p>
-                )}
-              </div>
-              <div className="p-3 bg-red-100 rounded-xl">
-                <AlertTriangle className="w-6 h-6 text-red-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         <Card className="card-hover">
           <CardContent className="pt-6">
@@ -256,7 +238,7 @@ export function DashboardPage() {
                         {rec.product_name}
                       </p>
                       <p className="text-sm text-slate-500">
-                        Stok: {rec.current_stock} unit
+                        Proyeksi: {rec.projected_demand} unit
                       </p>
                     </div>
                     <div className="flex items-center gap-3">

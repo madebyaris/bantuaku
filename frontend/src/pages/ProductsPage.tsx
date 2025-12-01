@@ -116,18 +116,6 @@ export function ProductsPage() {
                       <p className="font-semibold text-slate-900">
                         {formatCurrency(product.unit_price)}
                       </p>
-                      <p
-                        className={cn(
-                          'text-sm font-medium',
-                          product.stock < 10
-                            ? 'text-red-600'
-                            : product.stock < 30
-                            ? 'text-yellow-600'
-                            : 'text-green-600'
-                        )}
-                      >
-                        Stok: {product.stock}
-                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -154,17 +142,6 @@ export function ProductsPage() {
                       <Label className="text-slate-500">Harga Jual</Label>
                       <p className="font-semibold">
                         {formatCurrency(selectedProduct.unit_price)}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-slate-500">Stok</Label>
-                      <p
-                        className={cn(
-                          'font-semibold',
-                          selectedProduct.stock < 10 ? 'text-red-600' : ''
-                        )}
-                      >
-                        {selectedProduct.stock} unit
                       </p>
                     </div>
                   </div>
@@ -204,20 +181,6 @@ export function ProductsPage() {
                         </p>
                       </div>
 
-                      {/* Recommendation */}
-                      {forecast.forecast_30d > selectedProduct.stock && (
-                        <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-                          <p className="text-sm font-medium text-red-700">
-                            ⚠️ Rekomendasi Order
-                          </p>
-                          <p className="text-lg font-bold text-red-800">
-                            +{forecast.forecast_30d - selectedProduct.stock} unit
-                          </p>
-                          <p className="text-sm text-red-600 mt-1">
-                            Stok tidak cukup untuk 30 hari ke depan
-                          </p>
-                        </div>
-                      )}
 
                       <div className="text-xs text-slate-500">
                         Algoritma: {forecast.algorithm} • Diperbarui:{' '}
@@ -272,7 +235,6 @@ function AddProductModal({
     category: '',
     unit_price: '',
     cost: '',
-    stock: '',
   })
 
   async function handleSubmit(e: React.FormEvent) {
@@ -286,7 +248,6 @@ function AddProductModal({
         category: form.category || undefined,
         unit_price: parseFloat(form.unit_price) || 0,
         cost: parseFloat(form.cost) || undefined,
-        stock: parseInt(form.stock) || 0,
       })
       toast({ title: 'Produk berhasil ditambahkan', variant: 'success' })
       onSuccess()
@@ -336,26 +297,15 @@ function AddProductModal({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Harga Jual *</Label>
-                <Input
-                  type="number"
-                  value={form.unit_price}
-                  onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
-                  placeholder="85000"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Stok Awal</Label>
-                <Input
-                  type="number"
-                  value={form.stock}
-                  onChange={(e) => setForm({ ...form, stock: e.target.value })}
-                  placeholder="50"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>Harga Jual *</Label>
+              <Input
+                type="number"
+                value={form.unit_price}
+                onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
+                placeholder="85000"
+                required
+              />
             </div>
             <div className="flex gap-3 pt-4">
               <Button type="button" variant="outline" className="flex-1" onClick={onClose}>
