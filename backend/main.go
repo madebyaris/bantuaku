@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/bantuaku/backend/config"
 	"github.com/bantuaku/backend/handlers"
+	"github.com/bantuaku/backend/logger"
 	"github.com/bantuaku/backend/middleware"
 	"github.com/bantuaku/backend/services/storage"
 )
@@ -19,22 +19,40 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
+	// Initialize structured logger
+	logger.InitGlobalLogger(logger.Config{
+		Level:  logger.LogLevel(cfg.LogLevel),
+		Format: "json",
+		Output: os.Stdout,
+	})
+
+	log := logger.Default()
+	log.Info("Starting Bantuaku API server", "version", "0.1.0")
+
 	// Initialize database connection
+	log.Info("Connecting to database", "url", maskDatabaseURL(cfg.DatabaseURL))
 	db, err := storage.NewPostgres(cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Error("Failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
+	log.Info("Database connection established")
 
 	// Initialize Redis connection
+	log.Info("Connecting to Redis", "url", maskRedisURL(cfg.RedisURL))
 	redis, err := storage.NewRedis(cfg.RedisURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+		log.Warn("Failed to connect to Redis", "error", err)
+		// Continue without Redis for now
+	} else {
+		defer redis.Close()
+		log.Info("Redis connection established")
 	}
-	defer redis.Close()
 
 	// Create handler with dependencies
 	h := handlers.New(db, redis, cfg)
+	log.Info("HTTP handlers initialized")
 
 	// Setup router
 	mux := http.NewServeMux()
@@ -71,8 +89,25 @@ func main() {
 	mux.HandleFunc("GET /api/v1/sentiment/{product_id}", middleware.Auth(cfg.JWTSecret, h.GetSentiment))
 	mux.HandleFunc("GET /api/v1/market/trends", middleware.Auth(cfg.JWTSecret, h.GetMarketTrends))
 
-	// AI Assistant
+	// AI Assistant (legacy)
 	mux.HandleFunc("POST /api/v1/ai/analyze", middleware.Auth(cfg.JWTSecret, h.AIAnalyze))
+
+	// Chat & Conversations (NEW)
+	mux.HandleFunc("POST /api/v1/chat/start", middleware.Auth(cfg.JWTSecret, h.StartConversation))
+	mux.HandleFunc("POST /api/v1/chat/message", middleware.Auth(cfg.JWTSecret, h.SendMessage))
+	mux.HandleFunc("GET /api/v1/chat/conversations", middleware.Auth(cfg.JWTSecret, h.GetConversations))
+	mux.HandleFunc("GET /api/v1/chat/messages", middleware.Auth(cfg.JWTSecret, h.GetMessages))
+
+	// File Uploads (NEW)
+	mux.HandleFunc("POST /api/v1/files/upload", middleware.Auth(cfg.JWTSecret, h.UploadFile))
+	mux.HandleFunc("GET /api/v1/files/{id}", middleware.Auth(cfg.JWTSecret, h.GetFile))
+
+	// Insights (NEW - Four Outcome Types)
+	mux.HandleFunc("POST /api/v1/insights/forecast", middleware.Auth(cfg.JWTSecret, h.GenerateForecastInsight))
+	mux.HandleFunc("POST /api/v1/insights/market", middleware.Auth(cfg.JWTSecret, h.GenerateMarketInsight))
+	mux.HandleFunc("POST /api/v1/insights/marketing", middleware.Auth(cfg.JWTSecret, h.GenerateMarketingInsight))
+	mux.HandleFunc("POST /api/v1/insights/regulation", middleware.Auth(cfg.JWTSecret, h.GenerateRegulationInsight))
+	mux.HandleFunc("GET /api/v1/insights", middleware.Auth(cfg.JWTSecret, h.GetInsights))
 
 	// Dashboard
 	mux.HandleFunc("GET /api/v1/dashboard/summary", middleware.Auth(cfg.JWTSecret, h.DashboardSummary))
@@ -81,7 +116,8 @@ func main() {
 	handler := middleware.Chain(
 		mux,
 		middleware.RequestID,
-		middleware.Logger,
+		middleware.StructuredLogger,
+		middleware.ErrorHandler,
 		middleware.CORS(cfg.CORSOrigin),
 		middleware.Recover,
 	)
@@ -97,9 +133,10 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		log.Printf("🚀 Bantuaku API server starting on port %s", cfg.Port)
+		log.Info("Starting HTTP server", "port", cfg.Port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server error: %v", err)
+			log.Error("Server error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -108,13 +145,66 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	log.Info("Shutting down server gracefully...")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		log.Error("Server forced to shutdown", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Server exited properly")
+	log.Info("Server exited properly")
+}
+
+// maskDatabaseURL masks sensitive information in database URL for logging
+func maskDatabaseURL(url string) string {
+	if url == "" {
+		return "empty"
+	}
+
+	// For PostgreSQL URLs, mask the password
+	if len(url) > 10 && url[:10] == "postgres://" {
+		// Find the user:password part (between // and @)
+		startIdx := len("postgres://")
+		atIdx := -1
+		for i := startIdx; i < len(url); i++ {
+			if url[i] == '@' {
+				atIdx = i
+				break
+			}
+		}
+
+		if atIdx != -1 {
+			// Find the colon in the user:password part
+			colonIdx := -1
+			for i := startIdx; i < atIdx; i++ {
+				if url[i] == ':' {
+					colonIdx = i
+					break
+				}
+			}
+
+			if colonIdx != -1 {
+				// Return masked URL
+				return url[:colonIdx+1] + "****" + url[atIdx:]
+			}
+		}
+	}
+
+	return "****" // Fallback
+}
+
+// maskRedisURL masks sensitive information in Redis URL for logging
+func maskRedisURL(url string) string {
+	if url == "" {
+		return "empty"
+	}
+
+	// For Redis URLs, mask the password
+	if len(url) > 8 && url[:8] == "redis://" {
+		return "redis://****"
+	}
+
+	return "****" // Fallback
 }

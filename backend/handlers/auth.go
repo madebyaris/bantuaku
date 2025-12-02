@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bantuaku/backend/errors"
+	"github.com/bantuaku/backend/validation"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -13,16 +15,16 @@ import (
 
 // RegisterRequest represents a registration request
 type RegisterRequest struct {
-	Email     string `json:"email"`
-	Password  string `json:"password"`
-	StoreName string `json:"store_name"`
-	Industry  string `json:"industry,omitempty"`
+	Email     string `json:"email" validate:"required,email"`
+	Password  string `json:"password" validate:"required,min:6"`
+	StoreName string `json:"store_name" validate:"required,max:255"`
+	Industry  string `json:"industry,omitempty" validate:"max:100"`
 }
 
 // LoginRequest represents a login request
 type LoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required"`
 }
 
 // AuthResponse represents authentication response with token
@@ -37,23 +39,22 @@ type AuthResponse struct {
 // Register handles user registration
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
-	if err := parseJSON(r, &req); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid request body")
+	if err := h.parseJSON(r, &req); err != nil {
+		h.respondError(w, err, r)
 		return
 	}
 
-	// Validate input
+	// Validate input using validation package
+	if err := validation.Validate(req); err != nil {
+		h.respondError(w, err, r)
+		return
+	}
+
+	// Manually validate email format (in addition to tag validation)
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	if req.Email == "" || !strings.Contains(req.Email, "@") {
-		respondError(w, http.StatusBadRequest, "Valid email is required")
-		return
-	}
-	if len(req.Password) < 6 {
-		respondError(w, http.StatusBadRequest, "Password must be at least 6 characters")
-		return
-	}
-	if req.StoreName == "" {
-		respondError(w, http.StatusBadRequest, "Store name is required")
+		err := errors.NewValidationError("Valid email is required", "Email field is missing or invalid")
+		h.respondError(w, err, r)
 		return
 	}
 
@@ -63,14 +64,16 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var existingID string
 	err := h.db.Pool().QueryRow(ctx, "SELECT id FROM users WHERE email = $1", req.Email).Scan(&existingID)
 	if err == nil {
-		respondError(w, http.StatusConflict, "Email already registered")
+		appErr := errors.NewConflictError("Email already registered", "A user with this email already exists")
+		h.respondError(w, appErr, r)
 		return
 	}
 
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to process password")
+		appErr := errors.NewInternalError(err, "Failed to process password")
+		h.respondError(w, appErr, r)
 		return
 	}
 
@@ -80,7 +83,8 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.db.Pool().Begin(ctx)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to start transaction")
+		appErr := errors.NewDatabaseError(err, "begin transaction")
+		h.respondError(w, appErr, r)
 		return
 	}
 	defer tx.Rollback(ctx)
@@ -91,7 +95,8 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		VALUES ($1, $2, $3, $4)
 	`, userID, req.Email, string(hashedPassword), time.Now())
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to create user")
+		appErr := errors.NewDatabaseError(err, "create user")
+		h.respondError(w, appErr, r)
 		return
 	}
 
@@ -101,23 +106,26 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		VALUES ($1, $2, $3, $4, 'free', 'active', $5)
 	`, storeID, userID, req.StoreName, req.Industry, time.Now())
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to create store")
+		appErr := errors.NewDatabaseError(err, "create store")
+		h.respondError(w, appErr, r)
 		return
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to commit transaction")
+		appErr := errors.NewDatabaseError(err, "commit transaction")
+		h.respondError(w, appErr, r)
 		return
 	}
 
 	// Generate JWT token
 	token, err := h.generateToken(userID, storeID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to generate token")
+		appErr := errors.NewInternalError(err, "Failed to generate token")
+		h.respondError(w, appErr, r)
 		return
 	}
 
-	respondJSON(w, http.StatusCreated, AuthResponse{
+	h.respondJSON(w, http.StatusCreated, AuthResponse{
 		Token:     token,
 		UserID:    userID,
 		StoreID:   storeID,
@@ -129,14 +137,22 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 // Login handles user authentication
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
-	if err := parseJSON(r, &req); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid request body")
+	if err := h.parseJSON(r, &req); err != nil {
+		h.respondError(w, err, r)
 		return
 	}
 
+	// Validate input using validation package
+	if err := validation.Validate(req); err != nil {
+		h.respondError(w, err, r)
+		return
+	}
+
+	// Manually validate email format (in addition to tag validation)
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	if req.Email == "" {
-		respondError(w, http.StatusBadRequest, "Email is required")
+		err := errors.NewValidationError("Email is required", "Email field is missing")
+		h.respondError(w, err, r)
 		return
 	}
 
@@ -148,13 +164,15 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		SELECT id, password_hash FROM users WHERE email = $1
 	`, req.Email).Scan(&userID, &passwordHash)
 	if err != nil {
-		respondError(w, http.StatusUnauthorized, "Invalid email or password")
+		appErr := errors.NewUnauthorizedError("Invalid email or password")
+		h.respondError(w, appErr, r)
 		return
 	}
 
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
-		respondError(w, http.StatusUnauthorized, "Invalid email or password")
+		appErr := errors.NewUnauthorizedError("Invalid email or password")
+		h.respondError(w, appErr, r)
 		return
 	}
 
@@ -164,18 +182,20 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		SELECT id, store_name, subscription_plan FROM stores WHERE user_id = $1 AND status = 'active' LIMIT 1
 	`, userID).Scan(&storeID, &storeName, &plan)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to fetch store")
+		appErr := errors.NewInternalError(err, "Failed to fetch store")
+		h.respondError(w, appErr, r)
 		return
 	}
 
 	// Generate JWT token
 	token, err := h.generateToken(userID, storeID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to generate token")
+		appErr := errors.NewInternalError(err, "Failed to generate token")
+		h.respondError(w, appErr, r)
 		return
 	}
 
-	respondJSON(w, http.StatusOK, AuthResponse{
+	h.respondJSON(w, http.StatusOK, AuthResponse{
 		Token:     token,
 		UserID:    userID,
 		StoreID:   storeID,

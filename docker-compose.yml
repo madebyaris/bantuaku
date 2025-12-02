@@ -9,7 +9,7 @@ services:
       - DATABASE_URL=postgres://bantuaku:bantuaku_secret@db:5432/bantuaku_dev?sslmode=disable
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=dev-jwt-secret-change-in-production
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - KOLOSAL_API_KEY=${KOLOSAL_API_KEY:-}
       - LOG_LEVEL=debug
       - PORT=8080
       - CORS_ORIGIN=http://localhost:3000
@@ -25,15 +25,20 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - VITE_API_URL=http://localhost:8080
+      - VITE_API_URL=http://backend:8080
+      - CHOKIDAR_USEPOLLING=true
+      - DOCKER=true
     depends_on:
       - backend
     volumes:
       - ./frontend:/app
+      - /app/node_modules
     command: sh -c "npm install && npm run dev -- --host"
+    stdin_open: true
+    tty: true
 
   db:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     ports:
       - "5432:5432"
     environment:

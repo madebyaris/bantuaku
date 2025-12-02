@@ -13,7 +13,7 @@ AI-Powered Inventory & Demand Forecasting Platform for Indonesian UMKM (Micro, S
 ## Architecture Overview
 Built using Vertical Driven Development (VDD) principles:
 
-**Backend:** Go 1.22 (net/http) + PostgreSQL 16 + Redis 7
+**Backend:** Go 1.25 (net/http) + PostgreSQL 18 + Redis 7
 - 8 vertical slices (auth, products, sales, integrations, forecasts, sentiment, ai, dashboard)
 - 20+ REST API endpoints
 - JWT authentication, multi-tenant isolation
@@ -29,7 +29,7 @@ Built using Vertical Driven Development (VDD) principles:
 - Nginx for frontend serving
 
 ## Technology Stack
-- **Backend**: Go 1.22, PostgreSQL 16, Redis 7
+- **Backend**: Go 1.25, PostgreSQL 18, Redis 7
 - **Frontend**: React 18, Vite, Tailwind CSS, TypeScript
 - **AI**: OpenAI GPT-4o Mini
 - **Deployment**: Docker, Docker Compose

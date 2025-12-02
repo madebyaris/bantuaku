@@ -1,9 +1,10 @@
 import { Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
-  Package,
-  FileInput,
-  Link2,
+  TrendingUp,
+  Globe,
+  Megaphone,
+  Scale,
   MessageSquareText,
   LogOut,
   Sparkles,
@@ -13,9 +14,10 @@ import { useAuthStore } from '@/state/auth'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Produk', href: '/products', icon: Package },
-  { name: 'Input Data', href: '/data-input', icon: FileInput },
-  { name: 'Integrasi', href: '/integrations', icon: Link2 },
+  { name: 'Forecast', href: '/forecast', icon: TrendingUp },
+  { name: 'Market Prediction', href: '/market-prediction', icon: Globe },
+  { name: 'Marketing Recommendation', href: '/marketing', icon: Megaphone },
+  { name: 'Government Regulation', href: '/regulation', icon: Scale },
   { name: 'AI Assistant', href: '/ai-chat', icon: MessageSquareText },
 ]
 

@@ -13,10 +13,16 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    watch: {
+      usePolling: true,
+      interval: 1000,
+    },
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:8080',
+        // In Docker, use service name 'backend', otherwise use localhost
+        target: process.env.VITE_API_URL || (process.env.DOCKER ? 'http://backend:8080' : 'http://localhost:8080'),
         changeOrigin: true,
+        secure: false,
       },
     },
   },
