@@ -3,9 +3,9 @@
 **AI-Powered Demand Forecasting Platform untuk UMKM Indonesia**
 
 ![Bantuaku](https://img.shields.io/badge/Status-Hackathon%20MVP-purple)
-![Go](https://img.shields.io/badge/Backend-Go%201.22-00ADD8)
+![Go](https://img.shields.io/badge/Backend-Go%201.25-00ADD8)
 ![React](https://img.shields.io/badge/Frontend-React%2018-61DAFB)
-![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2016-336791)
+![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2018-336791)
 
 ## 🎯 Overview
 
@@ -14,7 +14,7 @@ Bantuaku adalah platform SaaS yang membantu UMKM Indonesia membuat keputusan bis
 - **Forecasting Permintaan** - Prediksi penjualan 30/60/90 hari ke depan berdasarkan data historis
 - **Proyeksi Permintaan** - Rekomendasi proyeksi permintaan produk berdasarkan tren penjualan
 - **Integrasi WooCommerce** - Sinkronisasi produk dan pesanan
-- **AI Assistant** - Tanya jawab bisnis dalam Bahasa Indonesia
+- **AI Assistant** - Tanya jawab bisnis dalam Bahasa Indonesia (powered by Kolosal.ai)
 - **Sentiment Analysis** - Pantau sentiment pasar dan social media
 
 ## 🚀 Quick Start
@@ -23,7 +23,7 @@ Bantuaku adalah platform SaaS yang membantu UMKM Indonesia membuat keputusan bis
 
 - Docker & Docker Compose
 - Node.js 20+ (untuk development)
-- Go 1.22+ (untuk development)
+- Go 1.25+ (untuk development)
 
 ### Running with Docker
 
@@ -97,18 +97,28 @@ npm run dev
 
 ### Environment Variables
 
-Create a `.env` file in the root:
+Copy the example environment file and configure it:
 
-```env
-# Backend
-DATABASE_URL=postgres://bantuaku:bantuaku_secret@localhost:5432/bantuaku_dev?sslmode=disable
-REDIS_URL=redis://localhost:6379
-JWT_SECRET=your-jwt-secret
-OPENAI_API_KEY=sk-your-openai-key
+```bash
+# Copy the example file
+cp .env.example .env
 
-# Frontend
-VITE_API_URL=http://localhost:8080
+# Edit .env and add your values (especially KOLOSAL_API_KEY)
+# See .env.example for all available configuration options
 ```
+
+**Required variables:**
+- `KOLOSAL_API_KEY` - Get from https://api.kolosal.ai (optional for basic features)
+- `JWT_SECRET` - Generate with: `openssl rand -base64 32` (change from default!)
+
+**Quick setup:**
+```env
+# Minimum required for local development
+KOLOSAL_API_KEY=your-api-key-here
+JWT_SECRET=your-secure-secret-here
+```
+
+See `.env.example` for complete configuration options and documentation.
 
 ## 📚 API Endpoints
 
@@ -147,11 +157,11 @@ VITE_API_URL=http://localhost:8080
 
 | Component | Technology |
 |-----------|-----------|
-| Backend | Go 1.22 (net/http) |
+| Backend | Go 1.25 (net/http) |
 | Frontend | React 18 + Vite + Tailwind |
-| Database | PostgreSQL 16 |
+| Database | PostgreSQL 18 |
 | Cache | Redis 7 |
-| AI | OpenAI GPT-4o Mini |
+| AI | Kolosal.ai (Chat & OCR) |
 | Deployment | Docker |
 
 ## 📊 Features

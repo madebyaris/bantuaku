@@ -10,9 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"bantuaku/backend/services/kolosal"
+
 	"github.com/bantuaku/backend/middleware"
 	"github.com/bantuaku/backend/models"
-	openai "github.com/sashabaranov/go-openai"
 )
 
 // AIAnalyze handles AI analysis questions
@@ -53,19 +54,19 @@ func (h *Handler) AIAnalyze(w http.ResponseWriter, r *http.Request) {
 	systemPrompt := buildSystemPrompt()
 	userPrompt := buildUserPrompt(req.Question, storeContext)
 
-	// Call OpenAI (or return mock response if no API key)
+	// Call Kolosal.ai (or return mock response if no API key)
 	var answer string
 	var confidence float64
 	dataSources := []string{}
 
-	if h.config.OpenAIAPIKey != "" {
-		client := openai.NewClient(h.config.OpenAIAPIKey)
+	if h.config.KolosalAPIKey != "" {
+		client := kolosal.NewClient(h.config.KolosalAPIKey)
 
-		resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-			Model: openai.GPT4oMini,
-			Messages: []openai.ChatCompletionMessage{
-				{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
-				{Role: openai.ChatMessageRoleUser, Content: userPrompt},
+		resp, err := client.CreateChatCompletion(ctx, kolosal.ChatCompletionRequest{
+			Model: "default", // Use default model from Kolosal.ai
+			Messages: []kolosal.ChatCompletionMessage{
+				{Role: "system", Content: systemPrompt},
+				{Role: "user", Content: userPrompt},
 			},
 			MaxTokens:   1000,
 			Temperature: 0.7,
