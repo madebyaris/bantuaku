@@ -6,9 +6,9 @@ INSERT INTO users (id, email, password_hash, created_at)
 VALUES (
     'demo-user-001',
     'demo@bantuaku.id',
-    '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.RSIaYEG9sFKqFqz2Py',
+    '$2a$10$E/KmS9sT76xcwUeji.gEDeikxK99miVSTZ9XCLrzcLYayVzvMT1JK',
     NOW()
-) ON CONFLICT (email) DO NOTHING;
+) ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 -- Demo Store
 INSERT INTO stores (id, user_id, store_name, industry, location, subscription_plan, status, created_at)

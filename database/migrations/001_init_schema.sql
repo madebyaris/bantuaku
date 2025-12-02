@@ -1,5 +1,5 @@
 -- Bantuaku SaaS - Initial Database Schema
--- PostgreSQL 16
+-- PostgreSQL 18
 
 -- Users table
 CREATE TABLE IF NOT EXISTS users (

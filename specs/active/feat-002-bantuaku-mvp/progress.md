@@ -31,9 +31,9 @@ All 8 vertical slices of the Bantuaku MVP have been successfully implemented:
 ## Technical Decisions
 
 - **Architecture:** Vertical Driven Development (VDD)
-- **Backend:** Go 1.22 with net/http (minimal dependencies)
+- **Backend:** Go 1.25 with net/http (minimal dependencies)
 - **Frontend:** React 18 + Vite + Tailwind + shadcn-style
-- **Database:** PostgreSQL 16
+- **Database:** PostgreSQL 18
 - **Cache:** Redis 7
 - **Deployment:** Docker Compose
 

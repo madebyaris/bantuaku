@@ -1,12 +1,14 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/state/auth'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { Layout } from '@/components/layout/Layout'
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { RegisterPage } from '@/pages/auth/RegisterPage'
 import { DashboardPage } from '@/pages/DashboardPage'
-import { ProductsPage } from '@/pages/ProductsPage'
-import { DataInputPage } from '@/pages/DataInputPage'
-import { IntegrationsPage } from '@/pages/IntegrationsPage'
+import { ForecastPage } from '@/pages/ForecastPage'
+import { MarketPredictionPage } from '@/pages/MarketPredictionPage'
+import { MarketingPage } from '@/pages/MarketingPage'
+import { RegulationPage } from '@/pages/RegulationPage'
 import { AIChatPage } from '@/pages/AIChatPage'
 import { Toaster } from '@/components/ui/toaster'
 
@@ -22,7 +24,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <>
+    <ErrorBoundary>
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
@@ -39,9 +41,10 @@ function App() {
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="products" element={<ProductsPage />} />
-          <Route path="data-input" element={<DataInputPage />} />
-          <Route path="integrations" element={<IntegrationsPage />} />
+          <Route path="forecast" element={<ForecastPage />} />
+          <Route path="market-prediction" element={<MarketPredictionPage />} />
+          <Route path="marketing" element={<MarketingPage />} />
+          <Route path="regulation" element={<RegulationPage />} />
           <Route path="ai-chat" element={<AIChatPage />} />
         </Route>
         
@@ -49,7 +52,7 @@ function App() {
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
       <Toaster />
-    </>
+    </ErrorBoundary>
   )
 }
 
