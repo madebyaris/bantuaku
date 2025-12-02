@@ -232,34 +232,34 @@ export function DashboardPage() {
           <CardHeader className="border-b border-white/5 pb-4">
             <CardTitle className="text-lg text-slate-100">Aksi Cepat</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 pt-6">
-            <Link to="/ai-chat">
-              <Button className="w-full justify-start bg-gradient-to-r from-emerald-600 to-emerald-400 hover:from-emerald-500 hover:to-emerald-300 text-black font-semibold shadow-[0_0_20px_rgba(16,185,129,0.3)] border-0">
-                <MessageSquareText className="w-4 h-4 mr-2" />
+          <CardContent className="space-y-6 pt-6">
+            <Link to="/ai-chat" className="block">
+              <Button className="w-full h-12 justify-start bg-gradient-to-r from-emerald-600 to-emerald-400 hover:from-emerald-500 hover:to-emerald-300 text-black font-semibold shadow-[0_0_20px_rgba(16,185,129,0.3)] border-0">
+                <MessageSquareText className="w-5 h-5 mr-3" />
                 Mulai Chat dengan AI
               </Button>
             </Link>
-            <Link to="/forecast">
-              <Button variant="outline" className="w-full justify-start border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-emerald-400 hover:border-emerald-500/30">
-                <BarChart3 className="w-4 h-4 mr-2" />
+            <Link to="/forecast" className="block">
+              <Button variant="outline" className="w-full h-12 justify-start border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-emerald-400 hover:border-emerald-500/30">
+                <BarChart3 className="w-5 h-5 mr-3" />
                 Lihat Forecast
               </Button>
             </Link>
-            <Link to="/market-prediction">
-              <Button variant="outline" className="w-full justify-start border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-blue-400 hover:border-blue-500/30">
-                <Globe className="w-4 h-4 mr-2" />
+            <Link to="/market-prediction" className="block">
+              <Button variant="outline" className="w-full h-12 justify-start border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-blue-400 hover:border-blue-500/30">
+                <Globe className="w-5 h-5 mr-3" />
                 Prediksi Pasar
               </Button>
             </Link>
-            <Link to="/marketing">
-              <Button variant="outline" className="w-full justify-start border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-purple-400 hover:border-purple-500/30">
-                <Megaphone className="w-4 h-4 mr-2" />
+            <Link to="/marketing" className="block">
+              <Button variant="outline" className="w-full h-12 justify-start border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-purple-400 hover:border-purple-500/30">
+                <Megaphone className="w-5 h-5 mr-3" />
                 Rekomendasi Marketing
               </Button>
             </Link>
-            <Link to="/regulation">
-              <Button variant="outline" className="w-full justify-start border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-orange-400 hover:border-orange-500/30">
-                <Scale className="w-4 h-4 mr-2" />
+            <Link to="/regulation" className="block">
+              <Button variant="outline" className="w-full h-12 justify-start border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-orange-400 hover:border-orange-500/30">
+                <Scale className="w-5 h-5 mr-3" />
                 Peraturan Pemerintah
               </Button>
             </Link>
