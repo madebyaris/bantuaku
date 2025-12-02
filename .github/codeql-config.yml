@@ -1,0 +1,24 @@
+name: "CodeQL Config"
+
+# CodeQL configuration for Bantuaku
+# This file configures CodeQL analysis for better security scanning
+
+paths:
+  # Include all source files
+  - "backend/**"
+  - "frontend/src/**"
+
+paths-ignore:
+  # Exclude generated files, dependencies, and build artifacts
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/.next/**"
+  - "**/vendor/**"
+  - "**/*.min.js"
+  - "**/*.bundle.js"
+  - "**/go.sum"
+
+queries:
+  # Use security and quality queries
+  - uses: security-and-quality
