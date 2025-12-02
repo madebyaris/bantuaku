@@ -7,6 +7,7 @@
 ![React](https://img.shields.io/badge/Frontend-React%2018-61DAFB)
 ![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2018-336791)
 ![Kolosal.ai](https://img.shields.io/badge/AI-Kolosal.ai-blue)
+![CodeRabbit Reviews](https://img.shields.io/coderabbit/prs/github/madebyaris/bantuaku?utm_source=oss&utm_medium=github&utm_campaign=madebyaris%2Fbantuaku&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 
 ## 🎯 Overview
 
@@ -351,7 +352,51 @@ All powered by **Kolosal.ai** for natural language understanding and OCR process
 
 ## 📝 License
 
-MIT License - see [LICENSE](LICENSE) file.
+Apache License 2.0 - see [LICENSE](LICENSE) file for details.
+
+## 🔒 Security
+
+We take security seriously. Please see our [Security Policy](.github/SECURITY.md) for details on how to report vulnerabilities.
+
+### Security Scanning
+
+This repository uses automated security scanning:
+
+- **Dependabot** - Automated dependency updates and vulnerability alerts
+- **CodeQL** - Static code analysis for security vulnerabilities
+- **CodeRabbit** - AI-powered code reviews for security and quality
+- **Dependency Review** - PR dependency scanning
+- **Security Workflows** - npm audit and Go security scanners
+
+To enable these features:
+1. Go to your repository **Settings** → **Code security and analysis**
+2. Enable **Dependabot alerts** and **Dependabot security updates**
+3. Enable **Code scanning** (CodeQL)
+4. Enable **Secret scanning**
+
+All security workflows are configured in `.github/workflows/` and will run automatically on push and pull requests.
+
+## 🤖 Code Review with CodeRabbit
+
+We use [CodeRabbit](https://coderabbit.ai) for AI-powered code reviews that complement our security scanning tools.
+
+### Features
+
+- **AI-Powered Reviews** - Context-aware code analysis for Go and React/TypeScript
+- **Automated PR Summaries** - Quick understanding of changes
+- **Line-by-Line Suggestions** - Detailed feedback on code quality and best practices
+- **Natural Language Chat** - Ask questions about code changes directly in PRs
+- **Cursor IDE Integration** - Real-time code reviews in your editor
+
+### Configuration
+
+CodeRabbit is configured via `.coderabbit.yaml` with:
+- Go backend review guidelines (error handling, security, concurrency)
+- React/TypeScript frontend review guidelines (performance, accessibility, type safety)
+- Path filters to focus on source code
+- Integration with ESLint and Gitleaks
+
+See [CodeRabbit Setup Guide](.github/CODERABBIT_SETUP.md) for detailed setup instructions.
 
 ## 👥 Team
 
@@ -373,6 +418,7 @@ Built with ❤️ for IMPHNEN x Kolosal.ai Hackathon 2025
 ## 🙏 Acknowledgments
 
 - **Kolosal.ai** - For providing powerful AI chat and OCR capabilities
+- **CodeRabbit** - For AI-powered code reviews and quality assurance
 - **shadcn/ui** - For beautiful, accessible UI components
 - **Recharts** - For elegant data visualization
 - **Tailwind CSS** - For rapid UI development
