@@ -17,7 +17,7 @@ export function ForecastPage() {
         <div>
           <h1 className="text-3xl font-bold">Forecast</h1>
           <p className="text-muted-foreground mt-2">
-            Proyeksi penjualan dan stok untuk produk Anda
+            Proyeksi penjualan untuk produk Anda berdasarkan data yang Anda berikan
           </p>
         </div>
         <Button variant="outline" className="gap-2">
