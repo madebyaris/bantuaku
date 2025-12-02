@@ -46,7 +46,7 @@ func main() {
 		log.Warn("Failed to connect to Redis", "error", err)
 		// Continue without Redis for now
 	} else {
-		defer redis.Close()
+	defer redis.Close()
 		log.Info("Redis connection established")
 	}
 

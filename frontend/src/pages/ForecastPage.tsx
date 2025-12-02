@@ -12,15 +12,15 @@ export function ForecastPage() {
   }, [])
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 animate-fade-in-up">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Forecast</h1>
-          <p className="text-muted-foreground mt-2">
+          <h1 className="text-3xl font-bold font-display text-slate-100">Forecast</h1>
+          <p className="text-slate-400 mt-2">
             Proyeksi penjualan untuk produk Anda berdasarkan data yang Anda berikan
           </p>
         </div>
-        <Button variant="outline" className="gap-2">
+        <Button variant="outline" className="gap-2 border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-emerald-400 hover:border-emerald-500/30">
           <MessageSquareText className="w-4 h-4" />
           Tanya AI tentang forecast ini
         </Button>
@@ -28,15 +28,15 @@ export function ForecastPage() {
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <p className="text-muted-foreground">Memuat data forecast...</p>
+          <p className="text-slate-500">Memuat data forecast...</p>
         </div>
       ) : (
-        <Card>
+        <Card className="hover-card-effect border-white/10 bg-white/5 backdrop-blur-xl">
           <CardHeader>
-            <CardTitle>Forecast Penjualan</CardTitle>
+            <CardTitle className="text-slate-100">Forecast Penjualan</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">
+            <p className="text-slate-400">
               Fitur forecast sedang dalam pengembangan. Data akan ditampilkan di sini setelah
               Anda menginput data melalui AI Assistant.
             </p>

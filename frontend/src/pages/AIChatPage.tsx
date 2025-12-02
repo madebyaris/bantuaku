@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Sparkles, User } from 'lucide-react'
+import { Send, Loader2, Sparkles, User, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
@@ -30,6 +30,24 @@ export function AIChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  useEffect(() => {
+    // Load UnicornStudio script for matrix effect
+    const script = document.createElement('script')
+    script.src = "https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v1.4.29/dist/unicornStudio.umd.js"
+    script.onload = () => {
+      // @ts-ignore
+      if (window.UnicornStudio) {
+        // @ts-ignore
+        window.UnicornStudio.init()
+      }
+    }
+    document.head.appendChild(script)
+
+    return () => {
+      document.head.removeChild(script)
+    }
+  }, [])
 
   async function sendMessage(text: string) {
     if (!text.trim() || loading) return
@@ -77,18 +95,24 @@ export function AIChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-12rem)] animate-fade-in">
+    <div className="flex flex-col h-[calc(100vh-12rem)] animate-fade-in-up relative overflow-hidden rounded-xl">
+      {/* Matrix Background with Blur Overlay */}
+      <div className="absolute inset-0 -z-10 pointer-events-none">
+        <div className="absolute inset-0" data-us-project="EET25BiXxR2StNXZvAzF"></div>
+        <div className="absolute inset-0 bg-black/80 backdrop-blur-[2px]"></div>
+      </div>
+
       {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4 relative z-10">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="p-4 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-2xl shadow-xl shadow-purple-500/20 mb-6">
-              <Sparkles className="w-10 h-10 text-white" />
+            <div className="p-4 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.3)] mb-6">
+              <Sparkles className="w-10 h-10 text-black fill-black" />
             </div>
-            <h3 className="text-2xl font-display font-bold text-slate-900 mb-2">
+            <h3 className="text-2xl font-display font-bold text-slate-100 mb-2">
               Halo! Saya Asisten Bantuaku
             </h3>
-            <p className="text-slate-500 max-w-md mb-8">
+            <p className="text-slate-400 max-w-md mb-8">
               Tanyakan apa saja tentang bisnis Anda. Saya bisa membantu dengan
               forecasting, rekomendasi stok, dan analisis penjualan.
             </p>
@@ -99,7 +123,7 @@ export function AIChatPage() {
                 <button
                   key={i}
                   onClick={() => sendMessage(question)}
-                  className="p-3 text-left text-sm bg-white border border-slate-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors"
+                  className="p-3 text-left text-sm bg-white/5 border border-white/10 rounded-lg hover:border-emerald-500/50 hover:bg-white/10 text-slate-300 transition-all backdrop-blur-sm"
                 >
                   {question}
                 </button>
@@ -116,30 +140,30 @@ export function AIChatPage() {
               )}
             >
               {message.role === 'assistant' && (
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-white" />
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-[0_0_10px_rgba(16,185,129,0.3)]">
+                  <Sparkles className="w-4 h-4 text-black fill-black" />
                 </div>
               )}
               
               <div
                 className={cn(
-                  'max-w-[70%] rounded-2xl px-4 py-3',
+                  'max-w-[70%] rounded-2xl px-4 py-3 backdrop-blur-md',
                   message.role === 'user'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-white border border-slate-200 shadow-sm'
+                    ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                    : 'bg-white/5 border border-white/10 text-slate-200 shadow-sm'
                 )}
               >
                 <div
                   className={cn(
                     'text-sm whitespace-pre-wrap',
-                    message.role === 'assistant' && 'text-slate-700'
+                    message.role === 'assistant' && 'text-slate-200'
                   )}
                 >
                   {message.text}
                 </div>
                 
                 {message.confidence && (
-                  <div className="mt-2 pt-2 border-t border-slate-100 flex items-center gap-4 text-xs text-slate-500">
+                  <div className="mt-2 pt-2 border-t border-white/10 flex items-center gap-4 text-xs text-slate-400">
                     <span>
                       Confidence: {(message.confidence * 100).toFixed(0)}%
                     </span>
@@ -153,8 +177,8 @@ export function AIChatPage() {
               </div>
 
               {message.role === 'user' && (
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center">
-                  <User className="w-4 h-4 text-slate-600" />
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white/10 flex items-center justify-center border border-white/10">
+                  <User className="w-4 h-4 text-slate-300" />
                 </div>
               )}
             </div>
@@ -163,12 +187,12 @@ export function AIChatPage() {
         
         {loading && (
           <div className="flex gap-3 justify-start">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-white" />
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-[0_0_10px_rgba(16,185,129,0.3)]">
+              <Sparkles className="w-4 h-4 text-black fill-black" />
             </div>
-            <div className="bg-white border border-slate-200 shadow-sm rounded-2xl px-4 py-3">
-              <div className="flex items-center gap-2 text-slate-500">
-                <Loader2 className="w-4 h-4 animate-spin" />
+            <div className="bg-white/5 border border-white/10 shadow-sm rounded-2xl px-4 py-3 backdrop-blur-md">
+              <div className="flex items-center gap-2 text-slate-400">
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
                 <span className="text-sm">Menganalisis...</span>
               </div>
             </div>
@@ -179,17 +203,25 @@ export function AIChatPage() {
       </div>
 
       {/* Input */}
-      <div className="border-t bg-white p-4">
+      <div className="border-t border-white/10 bg-black/50 backdrop-blur-xl p-4 z-20">
         <form onSubmit={handleSubmit} className="flex gap-3 max-w-3xl mx-auto">
+          <Button 
+            type="button" 
+            variant="outline" 
+            size="icon"
+            className="shrink-0 border-white/10 bg-white/5 text-slate-400 hover:text-emerald-400 hover:border-emerald-500/30 hover:bg-emerald-500/10"
+          >
+            <Upload className="w-4 h-4" />
+          </Button>
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ketik pertanyaan Anda..."
             disabled={loading}
-            className="flex-1"
+            className="flex-1 bg-white/5 border-white/10 text-slate-100 placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20"
             autoFocus
           />
-          <Button type="submit" disabled={loading || !input.trim()}>
+          <Button type="submit" disabled={loading || !input.trim()} className="bg-emerald-500 hover:bg-emerald-400 text-black">
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
@@ -197,7 +229,7 @@ export function AIChatPage() {
             )}
           </Button>
         </form>
-        <p className="text-xs text-slate-400 text-center mt-2">
+        <p className="text-xs text-slate-500 text-center mt-2">
           AI dapat membuat kesalahan. Verifikasi informasi penting.
         </p>
       </div>

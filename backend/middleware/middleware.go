@@ -370,3 +370,10 @@ func GetStoreID(ctx context.Context) string {
 	storeID, _ := ctx.Value(StoreIDKey).(string)
 	return storeID
 }
+
+// GetCompanyID extracts company ID from context (same as store_id for now)
+// TODO: Update JWT to use company_id instead of store_id
+func GetCompanyID(ctx context.Context) string {
+	// For now, store_id in JWT is actually company_id after migration
+	return GetStoreID(ctx)
+}

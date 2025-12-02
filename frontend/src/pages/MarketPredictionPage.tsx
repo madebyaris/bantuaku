@@ -6,27 +6,27 @@ export function MarketPredictionPage() {
   const [scope, setScope] = useState<'local' | 'global'>('local')
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 animate-fade-in-up">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">Market Prediction</h1>
-        <p className="text-muted-foreground mt-2">
+        <h1 className="text-3xl font-bold font-display text-slate-100">Market Prediction</h1>
+        <p className="text-slate-400 mt-2">
           Prediksi tren pasar lokal dan global untuk produk Anda
         </p>
       </div>
 
       <Tabs value={scope} onValueChange={(v) => setScope(v as 'local' | 'global')}>
-        <TabsList>
-          <TabsTrigger value="local">Lokal (Indonesia)</TabsTrigger>
-          <TabsTrigger value="global">Global</TabsTrigger>
+        <TabsList className="bg-white/5 border border-white/10">
+          <TabsTrigger value="local" className="data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400 text-slate-400">Lokal (Indonesia)</TabsTrigger>
+          <TabsTrigger value="global" className="data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400 text-slate-400">Global</TabsTrigger>
         </TabsList>
 
         <TabsContent value="local" className="mt-6">
-          <Card>
+          <Card className="hover-card-effect border-white/10 bg-white/5 backdrop-blur-xl">
             <CardHeader>
-              <CardTitle>Tren Pasar Lokal</CardTitle>
+              <CardTitle className="text-slate-100">Tren Pasar Lokal</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">
+              <p className="text-slate-400">
                 Analisis tren pasar Indonesia akan ditampilkan di sini setelah data tersedia.
               </p>
             </CardContent>
@@ -34,12 +34,12 @@ export function MarketPredictionPage() {
         </TabsContent>
 
         <TabsContent value="global" className="mt-6">
-          <Card>
+          <Card className="hover-card-effect border-white/10 bg-white/5 backdrop-blur-xl">
             <CardHeader>
-              <CardTitle>Tren Pasar Global</CardTitle>
+              <CardTitle className="text-slate-100">Tren Pasar Global</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">
+              <p className="text-slate-400">
                 Analisis tren pasar global akan ditampilkan di sini setelah data tersedia.
               </p>
             </CardContent>
