@@ -4,19 +4,9 @@ This document explains how to enable and configure security scanning tools for t
 
 ## 🔧 GitHub Settings Configuration
 
-### Step 1: Enable Dependabot
+**Note**: Dependabot is disabled. We use CodeRabbit for code reviews and manage dependencies manually.
 
-1. Go to your repository on GitHub
-2. Navigate to **Settings** → **Code security and analysis**
-3. Under **Dependabot alerts**, click **Enable**
-4. Under **Dependabot security updates**, click **Enable**
-
-This will:
-- Scan dependencies for known vulnerabilities
-- Create pull requests to fix security vulnerabilities automatically
-- Alert you when new vulnerabilities are discovered
-
-### Step 2: Enable Code Scanning (CodeQL)
+### Step 1: Enable Code Scanning (CodeQL)
 
 1. Go to **Settings** → **Code security and analysis**
 2. Under **Code scanning**, find **CodeQL analysis**
@@ -29,14 +19,14 @@ The workflow file `.github/workflows/codeql.yml` is already configured and will:
 - Run weekly on Mondays
 - Analyze both JavaScript (frontend) and Go (backend) code
 
-### Step 3: Enable Secret Scanning
+### Step 2: Enable Secret Scanning
 
 1. Go to **Settings** → **Code security and analysis**
 2. Under **Secret scanning**, click **Enable**
 
 This will scan your repository for accidentally committed secrets (API keys, passwords, etc.)
 
-### Step 4: Enable Dependency Review
+### Step 3: Enable Dependency Review
 
 1. Go to **Settings** → **Code security and analysis**
 2. Under **Dependency review**, click **Enable**
@@ -65,27 +55,7 @@ All security workflows are located in `.github/workflows/`:
   - Frontend: npm audit
   - Backend: Gosec, govulncheck
 
-## 🤖 Dependabot Configuration
-
-Dependabot is configured via `.github/dependabot.yml`:
-
-- **npm** (Frontend): Weekly updates on Mondays
-- **gomod** (Backend): Weekly updates on Mondays
-- **github-actions**: Monthly updates
-- **docker**: Monthly updates
-
-### Dependabot Features:
-- Groups minor and patch updates together
-- Limits open PRs to prevent spam
-- Adds appropriate labels
-- Uses conventional commit messages
-
 ## 📊 Viewing Results
-
-### Security Alerts
-- Go to **Security** tab → **Dependabot alerts**
-- View all open vulnerabilities
-- Filter by severity, ecosystem, etc.
 
 ### Code Scanning Results
 - Go to **Security** tab → **Code scanning**
@@ -102,16 +72,10 @@ Configure notifications:
 1. Go to **Settings** → **Notifications**
 2. Enable notifications for:
    - Security alerts
-   - Dependabot alerts
    - Code scanning alerts
+   - CodeRabbit reviews
 
 ## 🛠️ Local Testing
-
-### Test Dependabot Configuration
-```bash
-# Validate YAML syntax
-yamllint .github/dependabot.yml
-```
 
 ### Test Workflow Files
 ```bash
@@ -150,12 +114,17 @@ govulncheck ./...
 
 ## 📝 Best Practices
 
-1. **Review Dependabot PRs Regularly**
-   - Check weekly for dependency updates
-   - Test updates before merging
-   - Review changelogs for breaking changes
+1. **Review CodeRabbit Suggestions Regularly**
+   - Check CodeRabbit reviews on pull requests
+   - Address security and quality suggestions
+   - Use CodeRabbit chat for clarifications
 
-2. **Address Security Alerts Promptly**
+2. **Manage Dependencies Manually**
+   - Review dependency updates when needed
+   - Test updates before merging
+   - Use `npm audit` and `govulncheck` for security checks
+
+3. **Address Security Alerts Promptly**
    - Critical/High: Fix within 7 days
    - Moderate: Fix within 30 days
    - Low: Fix when convenient
@@ -172,11 +141,6 @@ govulncheck ./...
 
 ## 🚨 Troubleshooting
 
-### Dependabot Not Creating PRs
-- Check repository settings (must be enabled)
-- Verify `.github/dependabot.yml` syntax
-- Check Dependabot logs in **Settings** → **Code security and analysis**
-
 ### CodeQL Not Running
 - Verify workflow file syntax
 - Check repository Actions settings
@@ -190,8 +154,8 @@ govulncheck ./...
 ## 📚 Resources
 
 - [GitHub Security Documentation](https://docs.github.com/en/code-security)
-- [Dependabot Documentation](https://docs.github.com/en/code-security/dependabot)
 - [CodeQL Documentation](https://docs.github.com/en/code-security/code-scanning)
+- [CodeRabbit Documentation](https://docs.coderabbit.ai)
 - [Security Policy Template](https://github.com/github/security-policy-template)
 
 ---
