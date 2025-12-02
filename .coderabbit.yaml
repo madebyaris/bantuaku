@@ -21,6 +21,8 @@ reviews:
   auto_review:
     enabled: true
     drafts: false
+    # Review PRs targeting all branches (not just main/master)
+    target_branches: ["*"]
   
   # Path filters - focus on source code, exclude build artifacts
   path_filters:

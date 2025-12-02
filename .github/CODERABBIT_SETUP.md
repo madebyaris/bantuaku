@@ -57,7 +57,7 @@ You can customize this file if needed (see [Configuration Options](#configuratio
 
 #### Review Profile
 - **Profile**: `chill` - Standard review depth (change to `assertive` for more detailed feedback)
-- **Auto-review**: Enabled for all PRs
+- **Auto-review**: Enabled for all PRs targeting **all branches** (`target_branches: ["*"]`)
 - **Request changes**: Disabled (only suggestions, not blocking)
 
 #### Path Filters
@@ -106,6 +106,26 @@ reviews:
 ```yaml
 reviews:
   request_changes_workflow: true  # CodeRabbit can request changes
+```
+
+### Configure Branch Reviews
+
+CodeRabbit is configured to review PRs targeting **all branches**:
+
+```yaml
+reviews:
+  auto_review:
+    enabled: true
+    target_branches: ["*"]  # Review PRs targeting any branch
+```
+
+To limit reviews to specific branches only:
+
+```yaml
+reviews:
+  auto_review:
+    enabled: true
+    target_branches: ["main", "develop", "staging"]  # Only these branches
 ```
 
 ### Custom Path Instructions
