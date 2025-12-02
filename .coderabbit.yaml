@@ -22,6 +22,10 @@ reviews:
     enabled: true
     drafts: false
   
+  # Allow reviews on PRs targeting all branches (not just default branch)
+  allowed_base_branches:
+    - "*"
+  
   # Path filters - focus on source code, exclude build artifacts
   path_filters:
     - "backend/**/*.go"
