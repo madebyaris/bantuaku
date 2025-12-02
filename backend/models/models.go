@@ -103,22 +103,54 @@ type Mention struct {
 	Date      time.Time `json:"date"`
 }
 
-// MarketTrend represents a trending category or product
-type MarketTrend struct {
-	Name       string  `json:"name"`
-	Category   string  `json:"category,omitempty"`
-	TrendScore float64 `json:"trend_score"`
-	GrowthRate float64 `json:"growth_rate"`
-	Source     string  `json:"source"`
-}
-
 // DashboardSummary represents the main dashboard KPIs
 type DashboardSummary struct {
-	TotalProducts     int     `json:"total_products"`
-	ForecastAccuracy  float64 `json:"forecast_accuracy"`
+	// Company Info
+	CompanyName     string `json:"company_name,omitempty"`
+	CompanyIndustry string `json:"company_industry,omitempty"`
+	CompanyLocation string `json:"company_location,omitempty"`
+
+	// Revenue Metrics
 	RevenueThisMonth  float64 `json:"revenue_this_month"`
 	RevenueTrend      float64 `json:"revenue_trend"` // percentage change from last month
 	TopSellingProduct string  `json:"top_selling_product,omitempty"`
+
+	// Activity Metrics
+	TotalConversations int `json:"total_conversations"`
+	TotalInsights      int `json:"total_insights"`
+	TotalFileUploads   int `json:"total_file_uploads"`
+
+	// Insights Summary
+	InsightsSummary InsightsCounts `json:"insights_summary"`
+
+	// Recent Activity
+	RecentConversations []ConversationSummary `json:"recent_conversations,omitempty"`
+	RecentFileUploads   []FileUploadSummary   `json:"recent_file_uploads,omitempty"`
+}
+
+// InsightsCounts represents counts of each insight type
+type InsightsCounts struct {
+	Forecast   int `json:"forecast"`
+	Market     int `json:"market"`
+	Marketing  int `json:"marketing"`
+	Regulation int `json:"regulation"`
+}
+
+// ConversationSummary represents a brief conversation summary
+type ConversationSummary struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	LastMessage string `json:"last_message,omitempty"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+// FileUploadSummary represents a brief file upload summary
+type FileUploadSummary struct {
+	ID               string `json:"id"`
+	OriginalFilename string `json:"original_filename"`
+	SourceType       string `json:"source_type"`
+	Status           string `json:"status"`
+	CreatedAt        string `json:"created_at"`
 }
 
 // AIAnalyzeRequest represents a question to the AI assistant

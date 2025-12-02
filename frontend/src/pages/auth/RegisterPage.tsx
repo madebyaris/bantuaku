@@ -55,43 +55,44 @@ export function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-700 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-black p-4">
       {/* Background pattern */}
-      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48Y2lyY2xlIGN4PSIzMCIgY3k9IjMwIiByPSIyIi8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
+      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/20 via-black to-black pointer-events-none" />
 
-      <Card className="w-full max-w-md relative animate-fade-in">
+      <Card className="w-full max-w-md relative animate-fade-in border-white/10 bg-white/5 backdrop-blur-xl">
         <CardHeader className="text-center pb-2">
           <div className="flex justify-center mb-4">
-            <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 shadow-xl shadow-purple-500/30">
-              <Sparkles className="w-8 h-8 text-white" />
+            <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+              <Sparkles className="w-8 h-8 text-black fill-black" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-display">Mulai Gratis</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-2xl font-display text-slate-100">Mulai Gratis</CardTitle>
+          <CardDescription className="text-slate-400">
             Buat akun Bantuaku untuk toko Anda
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="storeName">Nama Toko</Label>
+              <Label htmlFor="storeName" className="text-slate-200">Nama Toko</Label>
               <Input
                 id="storeName"
                 placeholder="Toko Berkah Jaya"
                 value={storeName}
                 onChange={(e) => setStoreName(e.target.value)}
                 required
+                className="bg-white/5 border-white/10 text-slate-100 placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="industry">Kategori Bisnis</Label>
+              <Label htmlFor="industry" className="text-slate-200">Kategori Bisnis</Label>
               <Select value={industry} onValueChange={setIndustry}>
-                <SelectTrigger>
+                <SelectTrigger className="bg-white/5 border-white/10 text-slate-100 focus:border-emerald-500/50 focus:ring-emerald-500/20">
                   <SelectValue placeholder="Pilih kategori..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-black/90 border-white/10 text-slate-100">
                   {industries.map((ind) => (
-                    <SelectItem key={ind.value} value={ind.value}>
+                    <SelectItem key={ind.value} value={ind.value} className="focus:bg-emerald-500/20 focus:text-emerald-400">
                       {ind.label}
                     </SelectItem>
                   ))}
@@ -99,7 +100,7 @@ export function RegisterPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-slate-200">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -108,10 +109,11 @@ export function RegisterPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
+                className="bg-white/5 border-white/10 text-slate-100 placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" classname="text-slate-200">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -121,9 +123,10 @@ export function RegisterPage() {
                 required
                 minLength={6}
                 autoComplete="new-password"
+                className="bg-white/5 border-white/10 text-slate-100 placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full bg-gradient-to-r from-emerald-600 to-emerald-400 hover:from-emerald-500 hover:to-emerald-300 text-black font-semibold border-0" disabled={loading}>
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -136,10 +139,10 @@ export function RegisterPage() {
           </form>
 
           <div className="mt-6 text-center text-sm">
-            <span className="text-slate-600">Sudah punya akun? </span>
+            <span className="text-slate-400">Sudah punya akun? </span>
             <Link
               to="/login"
-              className="font-medium text-purple-600 hover:text-purple-700"
+              className="font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
             >
               Masuk
             </Link>
