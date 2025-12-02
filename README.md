@@ -362,7 +362,6 @@ We take security seriously. Please see our [Security Policy](.github/SECURITY.md
 
 This repository uses automated security scanning:
 
-- **Dependabot** - Automated dependency updates and vulnerability alerts
 - **CodeQL** - Static code analysis for security vulnerabilities
 - **CodeRabbit** - AI-powered code reviews for security and quality
 - **Dependency Review** - PR dependency scanning
@@ -370,11 +369,13 @@ This repository uses automated security scanning:
 
 To enable these features:
 1. Go to your repository **Settings** → **Code security and analysis**
-2. Enable **Dependabot alerts** and **Dependabot security updates**
-3. Enable **Code scanning** (CodeQL)
-4. Enable **Secret scanning**
+2. Enable **Code scanning** (CodeQL)
+3. Enable **Secret scanning**
+4. Install **CodeRabbit** GitHub App (see [CodeRabbit Setup Guide](.github/CODERABBIT_SETUP.md))
 
 All security workflows are configured in `.github/workflows/` and will run automatically on push and pull requests.
+
+**Note**: Dependabot is disabled. Dependency updates are managed manually or through CodeRabbit reviews.
 
 ## 🤖 Code Review with CodeRabbit
 
