@@ -37,7 +37,7 @@ func NewCrawler(baseURL string) *Crawler {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		log: logger.Default(),
+		log: *logger.Default(),
 	}
 }
 

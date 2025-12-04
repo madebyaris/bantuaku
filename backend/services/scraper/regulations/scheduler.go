@@ -34,7 +34,7 @@ func NewScheduler(pool *pgxpool.Pool, baseURL string, kolosalClient *kolosal.Cli
 		extractor: extractor,
 		chunker:   chunker,
 		store:     store,
-		log:       logger.Default(),
+		log:       *logger.Default(),
 		running:   false,
 	}
 }
@@ -80,8 +80,8 @@ func (s *Scheduler) RunJob(ctx context.Context, maxPages int) error {
 		}
 
 		// Check if already processed
-		processed, err := s.store.IsRegulationProcessed(ctx, regulationID)
-		if err == nil && processed {
+		alreadyProcessed, err := s.store.IsRegulationProcessed(ctx, regulationID)
+		if err == nil && alreadyProcessed {
 			s.log.Info("Regulation already processed, skipping", "id", regulationID)
 			skipped++
 			continue

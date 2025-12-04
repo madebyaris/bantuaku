@@ -138,7 +138,7 @@ func (c *Chunker) splitSection(section string, startIndex int) []Chunk {
 	chunkIndex := startIndex
 	startOffset := 0
 
-	for i, sentence := range sentences {
+	for _, sentence := range sentences {
 		sentenceLen := len(sentence)
 		
 		if currentLength+sentenceLen > c.chunkSize && currentLength > c.minChunkSize {

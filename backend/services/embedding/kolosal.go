@@ -32,7 +32,7 @@ func NewKolosalEmbedder(apiKey string) *KolosalEmbedder {
 		httpClient: &http.Client{
 			Timeout: DefaultTimeout,
 		},
-		log: logger.Default(),
+		log: *logger.Default(),
 	}
 }
 

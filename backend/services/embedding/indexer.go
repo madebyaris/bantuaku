@@ -24,7 +24,7 @@ func NewIndexer(pool *pgxpool.Pool, embedder Embedder) *Indexer {
 	return &Indexer{
 		pool:      pool,
 		embedder: embedder,
-		log:      logger.Default(),
+		log:      *logger.Default(),
 		batchSize: 10, // Process 10 chunks at a time
 	}
 }

@@ -19,7 +19,7 @@ type IngestService struct {
 func NewIngestService(pool *pgxpool.Pool) *IngestService {
 	return &IngestService{
 		store: NewStore(pool),
-		log:   logger.Default(),
+		log:   *logger.Default(),
 	}
 }
 

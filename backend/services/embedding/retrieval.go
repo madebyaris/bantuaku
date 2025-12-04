@@ -22,7 +22,7 @@ func NewRetrievalService(pool *pgxpool.Pool, embedder Embedder) *RetrievalServic
 	return &RetrievalService{
 		pool:     pool,
 		embedder: embedder,
-		log:      logger.Default(),
+		log:      *logger.Default(),
 	}
 }
 

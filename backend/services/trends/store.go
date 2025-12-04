@@ -20,7 +20,7 @@ type Store struct {
 func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{
 		pool: pool,
-		log:  logger.Default(),
+		log:  *logger.Default(),
 	}
 }
 

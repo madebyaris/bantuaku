@@ -37,7 +37,7 @@ func NewExtractor(kolosalClient *kolosal.Client) *Extractor {
 			Timeout: 60 * time.Second,
 		},
 		kolosal: kolosalClient,
-		log:     logger.Default(),
+		log:     *logger.Default(),
 		tempDir: tempDir,
 	}
 }
@@ -142,8 +142,8 @@ func (e *Extractor) extractTextFromPDF(filePath string) (string, int, error) {
 
 // extractWithOCR extracts text using OCR (Kolosal.ai or Tesseract)
 func (e *Extractor) extractWithOCR(ctx context.Context, pdfPath string) (string, error) {
-	// Read PDF file
-	pdfData, err := os.ReadFile(pdfPath)
+	// Read PDF file (for future use)
+	_, err := os.ReadFile(pdfPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read PDF: %w", err)
 	}

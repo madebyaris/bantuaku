@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/bantuaku/backend/errors"
 	"github.com/bantuaku/backend/logger"
 	"github.com/bantuaku/backend/services/embedding"
 )
@@ -24,7 +25,7 @@ func (h *Handler) IndexChunks(w http.ResponseWriter, r *http.Request) {
 	embedder, err := embedding.NewEmbedder(h.config)
 	if err != nil {
 		log.Error("Failed to create embedder", "error", err)
-		h.respondError(w, http.StatusInternalServerError, "Failed to initialize embedding service")
+		h.respondError(w, errors.NewInternalError(err, "Failed to initialize embedding service"), r)
 		return
 	}
 
@@ -58,7 +59,7 @@ func (h *Handler) SearchRegulations(w http.ResponseWriter, r *http.Request) {
 	// Get query parameter
 	query := r.URL.Query().Get("q")
 	if query == "" {
-		h.respondError(w, http.StatusBadRequest, "Query parameter 'q' is required")
+		h.respondError(w, errors.NewValidationError("Query parameter 'q' is required", ""), r)
 		return
 	}
 
@@ -88,7 +89,7 @@ func (h *Handler) SearchRegulations(w http.ResponseWriter, r *http.Request) {
 	embedder, err := embedding.NewEmbedder(h.config)
 	if err != nil {
 		log.Error("Failed to create embedder", "error", err)
-		h.respondError(w, http.StatusInternalServerError, "Failed to initialize embedding service")
+		h.respondError(w, errors.NewInternalError(err, "Failed to initialize embedding service"), r)
 		return
 	}
 
@@ -99,7 +100,7 @@ func (h *Handler) SearchRegulations(w http.ResponseWriter, r *http.Request) {
 	chunks, err := retrieval.Search(r.Context(), query, k, filters)
 	if err != nil {
 		log.Error("Search failed", "error", err)
-		h.respondError(w, http.StatusInternalServerError, "Search failed")
+		h.respondError(w, errors.NewInternalError(err, "Search failed"), r)
 		return
 	}
 

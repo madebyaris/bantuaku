@@ -5,11 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"time"
 
 	"github.com/bantuaku/backend/logger"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Store handles database persistence with deduplication
@@ -22,7 +21,7 @@ type Store struct {
 func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{
 		pool: pool,
-		log:  logger.Default(),
+		log:  *logger.Default(),
 	}
 }
 
