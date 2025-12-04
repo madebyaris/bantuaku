@@ -23,6 +23,13 @@ type Config struct {
 	// Embedding configuration
 	EmbeddingProvider string
 	EmbeddingAPIKey   string
+
+	// Forecasting service configuration
+	ForecastingServiceURL string
+
+	// Stripe billing configuration
+	StripeSecretKey     string
+	StripeWebhookSecret string
 }
 
 // Load reads configuration from environment variables
@@ -42,6 +49,11 @@ func Load() *Config {
 
 		EmbeddingProvider: getEnv("EMBEDDING_PROVIDER", "kolosal"),
 		EmbeddingAPIKey:   getEnv("EMBEDDING_API_KEY", ""), // Falls back to KolosalAPIKey if empty
+
+		ForecastingServiceURL: getEnv("FORECASTING_SERVICE_URL", "http://localhost:8001"),
+
+		StripeSecretKey:     getEnv("STRIPE_SECRET_KEY", ""),
+		StripeWebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
 	}
 }
 
