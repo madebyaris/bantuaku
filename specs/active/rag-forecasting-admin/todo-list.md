@@ -36,64 +36,75 @@
 
 ## Phase 2: Regulations Scraper (peraturan.go.id) — Ingestion
 
-- [ ] Build crawler to enumerate regulation PDFs (5h)
+- [x] Build crawler to enumerate regulation PDFs (5h)
   - **Acceptance criteria:** Crawl list/detail pages, discover PDF links with metadata (title, number, year, category, URL)
   - **Files:** backend/services/scraper/regulations/crawler.go (or node script alternative), backend/config/config.go
   - **Dependencies:** None
+  - **Status:** ✅ Completed - crawler.go implemented with goquery
 
-- [ ] PDF text extraction without persisting PDFs (6h)
+- [x] PDF text extraction without persisting PDFs (6h)
   - **Acceptance criteria:** Download to temp, extract clean text (ID locale), discard PDF; store raw text + metadata; handle scanned PDFs with OCR fallback if needed
   - **Files:** backend/services/scraper/regulations/extract.go
   - **Dependencies:** Crawler
+  - **Status:** ✅ Completed - extract.go implemented with OCR fallback support
 
-- [ ] Chunking and normalization pipeline (3h)
+- [x] Chunking and normalization pipeline (3h)
   - **Acceptance criteria:** Split into semantic chunks with overlap; persist to regulation_chunks; link to regulation and source
   - **Files:** backend/services/scraper/regulations/chunker.go
   - **Dependencies:** Extractor
+  - **Status:** ✅ Completed - chunker.go implemented with semantic chunking
 
-- [ ] Dedup/versioning and idempotent upserts (2h)
+- [x] Dedup/versioning and idempotent upserts (2h)
   - **Acceptance criteria:** Hashing to avoid duplicates; version field per regulation; safe re‑runs
   - **Files:** backend/services/scraper/regulations/store.go
   - **Dependencies:** Chunker
+  - **Status:** ✅ Completed - store.go implemented with SHA-256 hashing
 
-- [ ] Scheduler + admin trigger endpoints (3h)
+- [x] Scheduler + admin trigger endpoints (3h)
   - **Acceptance criteria:** Daily job; manual run endpoint; progress logs
   - **Files:** backend/handlers/regulations.go, backend/main.go (routes), backend/services/scheduler/scheduler.go
   - **Dependencies:** Ingestion pipeline
+  - **Status:** ✅ Completed - scheduler.go, handlers/regulations.go, routes added to main.go
 
 ## Phase 3: Embeddings & Vectorization
 
-- [ ] Select embedding provider and implement interface (4h)
+- [x] Select embedding provider and implement interface (4h)
   - **Acceptance criteria:** Abstraction interface; provider implementation (e.g., Open‑source sentence transformers via service, or vendor); configurable
   - **Files:** backend/services/embedding/interface.go, backend/services/embedding/provider_xxx.go, backend/config/config.go
   - **Dependencies:** None
+  - **Status:** ✅ Completed - interface.go, kolosal.go, factory.go implemented with configurable provider
 
-- [ ] Vectorize regulation chunks + upsert to DB (3h)
+- [x] Vectorize regulation chunks + upsert to DB (3h)
   - **Acceptance criteria:** Batch job to embed all new chunks; stored in regulation_embeddings with vector index
   - **Files:** backend/services/embedding/indexer.go
   - **Dependencies:** 004/005 migrations, embedding provider
+  - **Status:** ✅ Completed - indexer.go implemented with batch processing and pgvector integration
 
-- [ ] KNN retrieval API for regulations (2h)
+- [x] KNN retrieval API for regulations (2h)
   - **Acceptance criteria:** Service method returning top‑k chunks + metadata; supports filters (year, category)
   - **Files:** backend/services/embedding/retrieval.go
   - **Dependencies:** Indexer
+  - **Status:** ✅ Completed - retrieval.go implemented with KNN search, filters, and handlers/embeddings.go with API endpoints
 
 ## Phase 4: Chat RAG Integration
 
-- [ ] Augment chat SendMessage with retrieval (5h)
+- [x] Augment chat SendMessage with retrieval (5h)
   - **Acceptance criteria:** Query embedding → top‑k retrieval from regulations; context window builder; Kolosal.ai completion with citations
   - **Files:** backend/handlers/chat.go (RAG context), backend/handlers/ai.go (shared prompt builder)
   - **Dependencies:** Retrieval service
+  - **Status:** ✅ Completed - rag.go service created, SendMessage enhanced with RAG retrieval and context building
 
-- [ ] Return citations and source snippets in response (2h)
+- [x] Return citations and source snippets in response (2h)
   - **Acceptance criteria:** API returns sources (title, year, section, URL); UI can render
   - **Files:** backend/handlers/chat.go, frontend/src/components/chat/ChatInterface.tsx
   - **Dependencies:** Chat RAG
+  - **Status:** ✅ Completed - Citations added to SendMessageResponse, ExtractCitations function implemented
 
-- [ ] Relevance feedback and logging (2h)
+- [x] Relevance feedback and logging (2h)
   - **Acceptance criteria:** Optional thumbs up/down stored; retrieval diagnostics logged
   - **Files:** backend/handlers/chat.go, database/migrations/009_feedback.sql
   - **Dependencies:** Chat RAG
+  - **Status:** ✅ Completed - 009_feedback.sql migration created, handlers/feedback.go implemented, retrieval diagnostics logged
 
 ## Phase 5: Google Trends (Scraping, no official API)
 
