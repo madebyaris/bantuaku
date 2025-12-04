@@ -183,6 +183,62 @@ export const api = {
     },
     get: (id: string) => request<FileUpload>(`/files/${id}`),
   },
+
+  regulations: {
+    scrape: (maxPages?: number) => {
+      const params = new URLSearchParams()
+      if (maxPages) params.append('max_pages', maxPages.toString())
+      return request<{
+        message: string
+        max_pages: number
+        status: string
+      }>(`/regulations/scrape?${params.toString()}`, { method: 'POST' })
+    },
+    status: () =>
+      request<{
+        total_regulations: number
+        total_chunks: number
+        last_scrape: string | null
+      }>('/regulations/status'),
+    list: (category?: string, limit?: number, offset?: number) => {
+      const params = new URLSearchParams()
+      if (category) params.append('category', category)
+      if (limit) params.append('limit', limit.toString())
+      if (offset) params.append('offset', offset.toString())
+      return request<{
+        regulations: Regulation[]
+        count: number
+        limit: number
+        offset: number
+      }>(`/regulations?${params.toString()}`)
+    },
+    search: (query: string, k?: number, filters?: {
+      year?: number
+      category?: string
+      status?: string
+    }) => {
+      const params = new URLSearchParams()
+      params.append('q', query)
+      if (k) params.append('k', k.toString())
+      if (filters?.year) params.append('year', filters.year.toString())
+      if (filters?.category) params.append('category', filters.category)
+      if (filters?.status) params.append('status', filters.status)
+      return request<{
+        query: string
+        results: RegulationSearchResult[]
+        count: number
+      }>(`/regulations/search?${params.toString()}`)
+    },
+    indexChunks: (limit?: number) => {
+      const params = new URLSearchParams()
+      if (limit) params.append('limit', limit.toString())
+      return request<{
+        message: string
+        limit: number
+        status: string
+      }>(`/embeddings/index?${params.toString()}`, { method: 'POST' })
+    },
+  },
 }
 
 // Types
@@ -412,4 +468,33 @@ export interface FileUpload {
   error_message?: string
   created_at: string
   processed_at?: string
+}
+
+export interface Regulation {
+  id: string
+  title: string
+  regulation_number: string | null
+  year: number | null
+  category: string | null
+  status: string
+  source_url: string
+  pdf_url: string | null
+  published_date: string | null
+  effective_date: string | null
+  created_at: string
+}
+
+export interface RegulationSearchResult {
+  chunk_id: string
+  regulation_id: string
+  chunk_text: string
+  similarity: number
+  regulation: {
+    id: string
+    title: string
+    regulation_number: string | null
+    year: number | null
+    category: string | null
+    pdf_url: string | null
+  }
 }

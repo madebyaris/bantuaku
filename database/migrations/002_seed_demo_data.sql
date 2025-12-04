@@ -1,5 +1,6 @@
 -- Bantuaku Demo Data Seed
--- This creates a demo store with sample products and sales for hackathon demo
+-- This creates a demo company with sample products and sales for hackathon demo
+-- Updated to use company_id instead of store_id (after migration 003_add_chat_tables.sql)
 
 -- Demo User (password: demo123)
 INSERT INTO users (id, email, password_hash, created_at)
@@ -10,8 +11,8 @@ VALUES (
     NOW()
 ) ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
--- Demo Store
-INSERT INTO stores (id, user_id, store_name, industry, location, subscription_plan, status, created_at)
+-- Demo Company (stores table was renamed to companies in migration 003)
+INSERT INTO companies (id, owner_user_id, name, industry, location, subscription_plan, status, created_at)
 VALUES (
     'demo-store-001',
     'demo-user-001',
@@ -23,8 +24,8 @@ VALUES (
     NOW()
 ) ON CONFLICT DO NOTHING;
 
--- Sample Products
-INSERT INTO products (id, store_id, product_name, sku, category, unit_price, cost, created_at, updated_at)
+-- Sample Products (store_id renamed to company_id, product_name renamed to name in migration 003)
+INSERT INTO products (id, company_id, name, sku, category, unit_price, cost, created_at, updated_at)
 VALUES
     ('prod-001', 'demo-store-001', 'Kopi Arabica Premium 250g', 'KOP-ARB-250', 'Minuman', 85000, 45000, NOW(), NOW()),
     ('prod-002', 'demo-store-001', 'Teh Hijau Organik 100g', 'TEH-HIJ-100', 'Minuman', 35000, 18000, NOW(), NOW()),
@@ -65,8 +66,8 @@ BEGIN
             
             sale_price := base_prices[i];
             
-            -- Insert sale record
-            INSERT INTO sales_history (store_id, product_id, quantity, price, sale_date, source, created_at)
+            -- Insert sale record (store_id renamed to company_id in migration 003)
+            INSERT INTO sales_history (company_id, product_id, quantity, price, sale_date, source, created_at)
             VALUES (
                 'demo-store-001',
                 products_arr[i],
@@ -84,8 +85,8 @@ BEGIN
     END LOOP;
 END $$;
 
--- Sample Integration (WooCommerce connected)
-INSERT INTO integrations (id, store_id, platform, status, last_sync, metadata, created_at)
+-- Sample Integration (WooCommerce connected) - store_id renamed to company_id in migration 003
+INSERT INTO integrations (id, company_id, platform, status, last_sync, metadata, created_at)
 VALUES (
     'int-001',
     'demo-store-001',

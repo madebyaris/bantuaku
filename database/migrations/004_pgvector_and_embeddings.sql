@@ -29,5 +29,5 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_entity ON embeddings(entity_type, enti
 -- Comments
 COMMENT ON TABLE embeddings IS 'Vector embeddings for semantic search';
 COMMENT ON COLUMN embeddings.embedding IS 'Vector embedding (dimension varies by provider, default 1536 for Kolosal.ai)';
-COMMENT ON COLUMN embeddings.lists IS 'ivfflat lists parameter - tune based on data size (recommended: rows/1000)';
+-- Note: ivfflat index lists parameter should be tuned based on data size (recommended: rows/1000)
 
