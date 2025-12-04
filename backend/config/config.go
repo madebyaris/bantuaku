@@ -30,6 +30,11 @@ type Config struct {
 	// Stripe billing configuration
 	StripeSecretKey     string
 	StripeWebhookSecret string
+
+	// Mailjet email configuration
+	MailjetAPIKey    string
+	MailjetAPISecret string
+	AppBaseURL       string
 }
 
 // Load reads configuration from environment variables
@@ -54,6 +59,10 @@ func Load() *Config {
 
 		StripeSecretKey:     getEnv("STRIPE_SECRET_KEY", ""),
 		StripeWebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
+
+		MailjetAPIKey:    getEnv("MAILJET_API_KEY", ""),
+		MailjetAPISecret: getEnv("MAILJET_API_SECRET", ""),
+		AppBaseURL:       getEnv("APP_BASE_URL", "http://localhost:3000"),
 	}
 }
 
