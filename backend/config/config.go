@@ -1,6 +1,9 @@
 package config
 
-import "os"
+import (
+	"os"
+	"strconv"
+)
 
 // Config holds all configuration for the application
 type Config struct {
@@ -11,6 +14,15 @@ type Config struct {
 	KolosalAPIKey string // Using Kolosal.ai instead of OpenAI
 	CORSOrigin    string
 	LogLevel      string
+
+	// Regulations scraper configuration
+	RegulationsScraperEnabled bool
+	RegulationsScraperSchedule string
+	RegulationsBaseURL         string
+
+	// Embedding configuration
+	EmbeddingProvider string
+	EmbeddingAPIKey   string
 }
 
 // Load reads configuration from environment variables
@@ -23,6 +35,13 @@ func Load() *Config {
 		KolosalAPIKey: getEnv("KOLOSAL_API_KEY", ""),
 		CORSOrigin:    getEnv("CORS_ORIGIN", "http://localhost:3000"),
 		LogLevel:      getEnv("LOG_LEVEL", "info"),
+
+		RegulationsScraperEnabled: getEnvBool("REGULATIONS_SCRAPER_ENABLED", true),
+		RegulationsScraperSchedule: getEnv("REGULATIONS_SCRAPER_SCHEDULE", "0 2 * * *"),
+		RegulationsBaseURL:         getEnv("REGULATIONS_BASE_URL", "https://peraturan.go.id"),
+
+		EmbeddingProvider: getEnv("EMBEDDING_PROVIDER", "kolosal"),
+		EmbeddingAPIKey:   getEnv("EMBEDDING_API_KEY", ""), // Falls back to KolosalAPIKey if empty
 	}
 }
 
@@ -31,4 +50,16 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func getEnvBool(key string, defaultValue bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultValue
+	}
+	result, err := strconv.ParseBool(val)
+	if err != nil {
+		return defaultValue
+	}
+	return result
 }

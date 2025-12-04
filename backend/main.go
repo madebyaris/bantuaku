@@ -97,6 +97,7 @@ func main() {
 	mux.HandleFunc("POST /api/v1/chat/message", middleware.Auth(cfg.JWTSecret, h.SendMessage))
 	mux.HandleFunc("GET /api/v1/chat/conversations", middleware.Auth(cfg.JWTSecret, h.GetConversations))
 	mux.HandleFunc("GET /api/v1/chat/messages", middleware.Auth(cfg.JWTSecret, h.GetMessages))
+	mux.HandleFunc("POST /api/v1/chat/feedback", middleware.Auth(cfg.JWTSecret, h.SubmitFeedback))
 
 	// File Uploads (NEW)
 	mux.HandleFunc("POST /api/v1/files/upload", middleware.Auth(cfg.JWTSecret, h.UploadFile))
@@ -111,6 +112,14 @@ func main() {
 
 	// Dashboard
 	mux.HandleFunc("GET /api/v1/dashboard/summary", middleware.Auth(cfg.JWTSecret, h.DashboardSummary))
+
+	// Regulations scraper (admin endpoints)
+	mux.HandleFunc("POST /api/v1/regulations/scrape", middleware.Auth(cfg.JWTSecret, h.TriggerScraping))
+	mux.HandleFunc("GET /api/v1/regulations/status", middleware.Auth(cfg.JWTSecret, h.GetScrapingStatus))
+
+	// Embeddings & Vectorization
+	mux.HandleFunc("POST /api/v1/embeddings/index", middleware.Auth(cfg.JWTSecret, h.IndexChunks))
+	mux.HandleFunc("GET /api/v1/regulations/search", middleware.Auth(cfg.JWTSecret, h.SearchRegulations))
 
 	// Apply middleware stack
 	handler := middleware.Chain(
