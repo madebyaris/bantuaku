@@ -33,8 +33,9 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   }
   
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Request failed' }))
-    throw new Error(error.error || 'Request failed')
+    const error = await response.json().catch(() => ({ message: 'Request failed' }))
+    // Backend returns { code, message, details } format
+    throw new Error(error.message || error.error || 'Request failed')
   }
   
   return response.json()
@@ -56,14 +57,31 @@ export const api = {
       }),
     register: (email: string, password: string, storeName: string, industry?: string) =>
       request<{
-        token: string
-        user_id: string
-        store_id: string
-        store_name: string
-        plan: string
+        message: string
+        email: string
       }>('/auth/register', {
         method: 'POST',
         body: { email, password, store_name: storeName, industry },
+      }),
+    verifyEmail: (email: string, otp: string) =>
+      request<{ message: string }>('/auth/verify-email', {
+        method: 'POST',
+        body: { email, otp },
+      }),
+    resendVerification: (email: string) =>
+      request<{ message: string }>('/auth/resend-verification', {
+        method: 'POST',
+        body: { email },
+      }),
+    forgotPassword: (email: string) =>
+      request<{ message: string }>('/auth/forgot-password', {
+        method: 'POST',
+        body: { email },
+      }),
+    resetPassword: (token: string, newPassword: string) =>
+      request<{ message: string }>('/auth/reset-password', {
+        method: 'POST',
+        body: { token, new_password: newPassword },
       }),
   },
   
