@@ -78,6 +78,10 @@ func main() {
 	// Auth routes (public)
 	mux.HandleFunc("POST /api/v1/auth/register", h.Register)
 	mux.HandleFunc("POST /api/v1/auth/login", h.Login)
+	mux.HandleFunc("POST /api/v1/auth/verify-email", h.VerifyEmail)
+	mux.HandleFunc("POST /api/v1/auth/resend-verification", h.ResendVerification)
+	mux.HandleFunc("POST /api/v1/auth/forgot-password", h.RequestPasswordReset)
+	mux.HandleFunc("POST /api/v1/auth/reset-password", h.ResetPassword)
 
 	// Protected routes
 	mux.HandleFunc("GET /api/v1/products", middleware.Auth(cfg.JWTSecret, h.ListProducts))
