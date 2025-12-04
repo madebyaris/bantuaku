@@ -1,0 +1,70 @@
+---
+alwaysApply: true
+---
+
+# Bantuaku 10X Dev Rules
+
+**Stack:** React 18 + TS + Vite + Tailwind | Go 1.22 + PostgreSQL 18 + Redis 7 | Zustand | Kolosal.ai
+
+## 10X Principles
+
+1. **Read before write** — Understand existing code before changing
+2. **Minimal changes** — Only change what's necessary
+3. **No over-engineering** — Solve today's problem, not tomorrow's
+4. **Reuse > Create** — Use existing patterns/components first
+5. **Fix forward** — Don't add backwards-compat shims, change the code
+
+## Code Quality
+
+- **DRY** — Extract if used twice (`lib/api.ts`, `lib/utils.ts`)
+- **KISS** — Simple > clever. Readable > compact
+- **Single responsibility** — One purpose per function/component
+- **Explicit > implicit** — Clear types, clear names, clear intent
+
+## TypeScript
+
+- Path aliases: `@/*` → `import { x } from '@/lib/api'`
+- Types: interfaces for objects, types for unions
+- No `any` — use `unknown` or proper types
+- Let TS infer when obvious
+
+## React + Zustand
+
+- Functional components + hooks only
+- Zustand for global state (auth, chat), useState for local
+- `cn()` for conditional classes
+- Cleanup effects: `return () => cleanup()`
+- Memoize only when measured slow
+
+## Go
+
+- Handle all errors: `if err != nil { return errors.New...() }`
+- Context first: `func(ctx context.Context, ...)`
+- Defer cleanup: `defer tx.Rollback(ctx)`
+- Parameterized queries only: `$1, $2`
+
+## API + Database
+
+- REST: `/api/v1/{resource}` + proper HTTP methods
+- Structured errors: `{ code, message, details }`
+- UUID PKs, snake_case, indexed query fields
+- Transactions for multi-writes
+
+## Security
+
+- Validate both ends (frontend + backend)
+- bcrypt passwords, JWT tokens, env secrets
+- Never log/expose sensitive data
+
+## Style
+
+- Tailwind + "Neon Finance" theme
+- Glass: `bg-black/90 backdrop-blur-xl border-white/10`
+- Accent: `from-emerald-600 to-emerald-400`
+
+## Structure
+
+```
+frontend/src/{pages,components/ui,state,lib}
+backend/{handlers,services,models,middleware,errors,config}
+```
