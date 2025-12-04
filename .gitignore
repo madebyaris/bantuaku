@@ -45,3 +45,4 @@ db_data/
 tmp/
 temp/
 *.tmp
+backend/package-lock.json
