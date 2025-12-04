@@ -43,11 +43,26 @@ export function LoginPage() {
       toast({ title: 'Berhasil masuk!', variant: 'success' })
       navigate('/dashboard')
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Email atau password salah'
+      const isEmailNotVerified = errorMessage.toLowerCase().includes('email not verified') || 
+                                 errorMessage.toLowerCase().includes('belum diverifikasi')
+      
       toast({
         title: 'Gagal masuk',
-        description: err instanceof Error ? err.message : 'Email atau password salah',
+        description: errorMessage,
         variant: 'destructive',
       })
+
+      // If email not verified, show additional message
+      if (isEmailNotVerified) {
+        setTimeout(() => {
+          toast({
+            title: 'Email belum diverifikasi',
+            description: 'Silakan verifikasi email Anda terlebih dahulu. Periksa inbox untuk kode 5 digit.',
+            variant: 'default',
+          })
+        }, 500)
+      }
     } finally {
       setLoading(false)
     }
@@ -92,7 +107,7 @@ export function LoginPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password" className="text-slate-300">Password</Label>
-                <a href="#" className="text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors">Forgot password?</a>
+                <Link to="/forgot-password" className="text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors">Forgot password?</Link>
               </div>
               <Input
                 id="password"
