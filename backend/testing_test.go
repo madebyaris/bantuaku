@@ -154,7 +154,7 @@ func getTestRedisURL() string {
 }
 
 // CreateTestDB creates a test database connection
-func CreateTestDB(t *testing.T) *storage.PostgresDB {
+func CreateTestDB(t *testing.T) *storage.Postgres {
 	t.Helper()
 
 	db, err := storage.NewPostgres(getTestDatabaseURL())
@@ -166,7 +166,7 @@ func CreateTestDB(t *testing.T) *storage.PostgresDB {
 }
 
 // CreateTestRedis creates a test Redis connection
-func CreateTestRedis(t *testing.T) *storage.RedisDB {
+func CreateTestRedis(t *testing.T) *storage.Redis {
 	t.Helper()
 
 	redis, err := storage.NewRedis(getTestRedisURL())
@@ -180,7 +180,7 @@ func CreateTestRedis(t *testing.T) *storage.RedisDB {
 }
 
 // CleanupTestData cleans up test data from all tables
-func CleanupTestData(t *testing.T, db *storage.PostgresDB) {
+func CleanupTestData(t *testing.T, db *storage.Postgres) {
 	t.Helper()
 
 	// Clean up tables in reverse order of dependencies
@@ -198,7 +198,7 @@ func CleanupTestData(t *testing.T, db *storage.PostgresDB) {
 }
 
 // CreateTestUser creates a test user in the database
-func CreateTestUser(t *testing.T, db *storage.PostgresDB, email, password string) (string, error) {
+func CreateTestUser(t *testing.T, db *storage.Postgres, email, password string) (string, error) {
 	t.Helper()
 
 	userID := uuid.New().String()
@@ -216,7 +216,7 @@ func CreateTestUser(t *testing.T, db *storage.PostgresDB, email, password string
 }
 
 // CreateTestStore creates a test store in the database
-func CreateTestStore(t *testing.T, db *storage.PostgresDB, userID, storeName string) (string, error) {
+func CreateTestStore(t *testing.T, db *storage.Postgres, userID, storeName string) (string, error) {
 	t.Helper()
 
 	storeID := uuid.New().String()
@@ -230,7 +230,7 @@ func CreateTestStore(t *testing.T, db *storage.PostgresDB, userID, storeName str
 }
 
 // CreateTestProduct creates a test product in the database
-func CreateTestProduct(t *testing.T, db *storage.PostgresDB, storeID string, productName string) (string, error) {
+func CreateTestProduct(t *testing.T, db *storage.Postgres, storeID string, productName string) (string, error) {
 	t.Helper()
 
 	productID := uuid.New().String()
@@ -244,7 +244,7 @@ func CreateTestProduct(t *testing.T, db *storage.PostgresDB, storeID string, pro
 }
 
 // CreateTestSale creates a test sale in the database
-func CreateTestSale(t *testing.T, db *storage.PostgresDB, storeID, productID string, quantity int, price float64) error {
+func CreateTestSale(t *testing.T, db *storage.Postgres, storeID, productID string, quantity int, price float64) error {
 	t.Helper()
 
 	_, err := db.Pool().Exec(context.Background(), `

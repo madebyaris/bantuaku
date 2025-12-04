@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bantuaku/backend/errors"
+	"github.com/bantuaku/backend/logger"
 	"github.com/bantuaku/backend/validation"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -100,9 +101,9 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Insert store
+	// Insert company (stores table was renamed to companies in migration 003)
 	_, err = tx.Exec(ctx, `
-		INSERT INTO stores (id, user_id, store_name, industry, subscription_plan, status, created_at)
+		INSERT INTO companies (id, owner_user_id, name, industry, subscription_plan, status, created_at)
 		VALUES ($1, $2, $3, $4, 'free', 'active', $5)
 	`, storeID, userID, req.StoreName, req.Industry, time.Now())
 	if err != nil {
@@ -117,8 +118,8 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate JWT token
-	token, err := h.generateToken(userID, storeID)
+	// Generate JWT token (default role is 'user')
+	token, err := h.generateToken(userID, storeID, "user")
 	if err != nil {
 		appErr := errors.NewInternalError(err, "Failed to generate token")
 		h.respondError(w, appErr, r)
@@ -158,13 +159,26 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	// Get user by email
-	var userID, passwordHash string
+	// Get user by email (including role and status for JWT)
+	// Use exact match since email is already normalized
+	var userID, passwordHash, role, status string
 	err := h.db.Pool().QueryRow(ctx, `
-		SELECT id, password_hash FROM users WHERE email = $1
-	`, req.Email).Scan(&userID, &passwordHash)
+		SELECT id, password_hash, COALESCE(role, 'user'), COALESCE(status, 'active') 
+		FROM users 
+		WHERE email = $1
+	`, req.Email).Scan(&userID, &passwordHash, &role, &status)
 	if err != nil {
+		// Log the actual error for debugging (but don't expose it to user)
+		log := logger.With("request_id", r.Context().Value("request_id"))
+		log.Debug("Login failed - user not found", "email", req.Email, "error", err.Error())
 		appErr := errors.NewUnauthorizedError("Invalid email or password")
+		h.respondError(w, appErr, r)
+		return
+	}
+
+	// Check if user is active
+	if status != "active" {
+		appErr := errors.NewUnauthorizedError("Account is suspended. Please contact support.")
 		h.respondError(w, appErr, r)
 		return
 	}
@@ -176,19 +190,51 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get store for this user
+	// Get company for this user (stores table was renamed to companies in migration 003)
+	log := logger.With("request_id", r.Context().Value("request_id"))
+	
+	// Try to get active company first, then fall back to any company
 	var storeID, storeName, plan string
 	err = h.db.Pool().QueryRow(ctx, `
-		SELECT id, store_name, subscription_plan FROM stores WHERE user_id = $1 AND status = 'active' LIMIT 1
+		SELECT id, name, subscription_plan 
+		FROM companies 
+		WHERE owner_user_id = $1 AND status = 'active' 
+		LIMIT 1
 	`, userID).Scan(&storeID, &storeName, &plan)
+	
+	// If no active company, try to get any company for this user (including inactive)
 	if err != nil {
-		appErr := errors.NewInternalError(err, "Failed to fetch store")
+		log.Debug("No active company found, trying any company", "user_id", userID, "error", err.Error())
+		err = h.db.Pool().QueryRow(ctx, `
+			SELECT id, name, subscription_plan 
+			FROM companies 
+			WHERE owner_user_id = $1 
+			ORDER BY created_at DESC
+			LIMIT 1
+		`, userID).Scan(&storeID, &storeName, &plan)
+		
+		// If we found an inactive company, reactivate it
+		if err == nil {
+			var companyStatus string
+			statusErr := h.db.Pool().QueryRow(ctx, `SELECT status FROM companies WHERE id = $1`, storeID).Scan(&companyStatus)
+			if statusErr == nil && companyStatus != "active" {
+				log.Info("Reactivating inactive company for user", "user_id", userID, "company_id", storeID)
+				_, _ = h.db.Pool().Exec(ctx, `UPDATE companies SET status = 'active' WHERE id = $1`, storeID)
+			}
+		}
+	}
+	
+	// If still no company found, this should not happen with transaction-based user creation
+	// Return an error instead of auto-creating with generic name
+	if err != nil {
+		log.Error("CRITICAL: Company not found for user - user was created without company!", "user_id", userID, "error", err.Error())
+		appErr := errors.NewInternalError(err, "User account is missing company information. Please contact support to fix this issue.")
 		h.respondError(w, appErr, r)
 		return
 	}
 
-	// Generate JWT token
-	token, err := h.generateToken(userID, storeID)
+	// Generate JWT token (include role)
+	token, err := h.generateToken(userID, storeID, role)
 	if err != nil {
 		appErr := errors.NewInternalError(err, "Failed to generate token")
 		h.respondError(w, appErr, r)
@@ -204,10 +250,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) generateToken(userID, storeID string) (string, error) {
+func (h *Handler) generateToken(userID, storeID, role string) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id":  userID,
 		"store_id": storeID,
+		"role":     role,
 		"exp":      time.Now().Add(24 * time.Hour).Unix(),
 		"iat":      time.Now().Unix(),
 	}
