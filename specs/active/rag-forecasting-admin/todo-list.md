@@ -108,20 +108,23 @@
 
 ## Phase 5: Google Trends (Scraping, no official API)
 
-- [ ] Trends scraper without official API (6h)
+- [x] Trends scraper without official API (6h)
   - **Acceptance criteria:** Headless scraper to fetch interest‑over‑time for keywords/geo; retry/backoff; terms of use compliance
   - **Files:** tools/trends-scraper/ (Node/Playwright or Go/chromedp), README in folder
   - **Dependencies:** 006_trends.sql
+  - **Status:** ✅ Completed - scraper.go implemented with chromedp, retry logic, and README.md
 
-- [ ] Backend ingestion + storage (3h)
+- [x] Backend ingestion + storage (3h)
   - **Acceptance criteria:** Persist time series and related queries; dedup; keyed by keyword and geo
   - **Files:** backend/services/trends/store.go, backend/services/trends/ingest.go
   - **Dependencies:** Scraper artifacts
+  - **Status:** ✅ Completed - store.go and ingest.go implemented with deduplication and batch processing
 
-- [ ] Company‑scoped keyword management endpoints (3h)
+- [x] Company‑scoped keyword management endpoints (3h)
   - **Acceptance criteria:** CRUD for tracked keywords per company; list time series and related queries
   - **Files:** backend/handlers/trends.go, backend/main.go (routes)
   - **Dependencies:** Trends storage
+  - **Status:** ✅ Completed - handlers/trends.go implemented with CRUD endpoints, routes added to main.go
 
 ## Phase 6: Advanced Forecasting (12 months) + Monthly Strategies
 

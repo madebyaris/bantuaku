@@ -121,6 +121,13 @@ func main() {
 	mux.HandleFunc("POST /api/v1/embeddings/index", middleware.Auth(cfg.JWTSecret, h.IndexChunks))
 	mux.HandleFunc("GET /api/v1/regulations/search", middleware.Auth(cfg.JWTSecret, h.SearchRegulations))
 
+	// Google Trends
+	mux.HandleFunc("POST /api/v1/trends/keywords", middleware.Auth(cfg.JWTSecret, h.CreateKeyword))
+	mux.HandleFunc("GET /api/v1/trends/keywords", middleware.Auth(cfg.JWTSecret, h.ListKeywords))
+	mux.HandleFunc("DELETE /api/v1/trends/keywords", middleware.Auth(cfg.JWTSecret, h.DeleteKeyword))
+	mux.HandleFunc("GET /api/v1/trends/series", middleware.Auth(cfg.JWTSecret, h.GetTimeSeries))
+	mux.HandleFunc("POST /api/v1/trends/ingest", middleware.Auth(cfg.JWTSecret, h.TriggerIngestion))
+
 	// Apply middleware stack
 	handler := middleware.Chain(
 		mux,
