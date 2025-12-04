@@ -206,11 +206,21 @@ cp .env.example .env
 - `KOLOSAL_API_KEY` - Get from https://api.kolosal.ai (optional for basic features)
 - `JWT_SECRET` - Generate with: `openssl rand -base64 32` (change from default!)
 
+**Email Verification (Required for user registration):**
+- `MAILJET_API_KEY` - Get from https://www.mailjet.com/
+- `MAILJET_API_SECRET` - Get from https://www.mailjet.com/
+- `APP_BASE_URL` - Base URL for email links (e.g., `http://localhost:3000`)
+
 **Quick setup:**
 ```env
 # Minimum required for local development
 KOLOSAL_API_KEY=your-api-key-here
 JWT_SECRET=your-secure-secret-here
+
+# Email verification (required for user registration)
+MAILJET_API_KEY=your-mailjet-api-key
+MAILJET_API_SECRET=your-mailjet-api-secret
+APP_BASE_URL=http://localhost:3000
 ```
 
 See `.env.example` for complete configuration options and documentation.
@@ -218,8 +228,12 @@ See `.env.example` for complete configuration options and documentation.
 ## 📚 API Endpoints
 
 ### Authentication
-- `POST /api/v1/auth/register` - Register new user
-- `POST /api/v1/auth/login` - Login
+- `POST /api/v1/auth/register` - Register new user (requires email verification)
+- `POST /api/v1/auth/login` - Login (requires verified email)
+- `POST /api/v1/auth/verify-email` - Verify email with 5-digit OTP
+- `POST /api/v1/auth/resend-verification` - Resend verification email
+- `POST /api/v1/auth/forgot-password` - Request password reset
+- `POST /api/v1/auth/reset-password` - Reset password with token
 
 ### Chat & Conversations (AI-First Interface)
 - `POST /api/v1/chat/start` - Start new conversation
