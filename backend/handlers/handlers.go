@@ -7,14 +7,16 @@ import (
 	"github.com/bantuaku/backend/config"
 	"github.com/bantuaku/backend/errors"
 	"github.com/bantuaku/backend/logger"
+	"github.com/bantuaku/backend/services/audit"
 	"github.com/bantuaku/backend/services/storage"
 )
 
 // Handler holds dependencies for HTTP handlers
 type Handler struct {
-	db     *storage.Postgres
-	redis  *storage.Redis
-	config *config.Config
+	db          *storage.Postgres
+	redis       *storage.Redis
+	config      *config.Config
+	auditLogger *audit.Logger
 }
 
 // New creates a new Handler with dependencies
@@ -23,6 +25,7 @@ func New(db *storage.Postgres, redis *storage.Redis, cfg *config.Config) *Handle
 		db:     db,
 		redis:  redis,
 		config: cfg,
+		auditLogger: audit.NewLogger(db),
 	}
 }
 

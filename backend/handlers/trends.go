@@ -6,8 +6,8 @@ import (
 
 	"github.com/bantuaku/backend/errors"
 	"github.com/bantuaku/backend/logger"
+	"github.com/bantuaku/backend/services/audit"
 	"github.com/bantuaku/backend/services/trends"
-	"github.com/google/uuid"
 )
 
 // CreateKeywordRequest represents a request to create a tracked keyword
@@ -175,6 +175,13 @@ func (h *Handler) TriggerIngestion(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	log.Info("Trends ingestion triggered", "company_id", companyID)
+
+	// Log audit event for trends ingestion
+	if h.auditLogger != nil {
+		h.auditLogger.LogAction(r.Context(), r, audit.ActionTrendsIngested, map[string]interface{}{
+			"company_id": companyID,
+		})
+	}
 
 	h.respondJSON(w, http.StatusAccepted, map[string]interface{}{
 		"message":   "Trends ingestion started",
