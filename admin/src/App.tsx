@@ -10,6 +10,12 @@ import { Toaster } from '@/components/ui/toaster'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+  const hasHydrated = useAuthStore((state) => state.hasHydrated)
+  
+  // Wait for hydration before checking authentication
+  if (!hasHydrated) {
+    return null // or a loading spinner
+  }
   
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />

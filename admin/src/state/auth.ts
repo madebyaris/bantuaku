@@ -9,9 +9,11 @@ interface AuthState {
     role: string
   } | null
   isAuthenticated: boolean
+  hasHydrated: boolean
   login: (token: string, user: { id: string; email: string; role: string }) => void
   logout: () => void
   decodeToken: (token: string) => { id: string; email: string; role: string } | null
+  setHasHydrated: (state: boolean) => void
 }
 
 // Simple JWT decode (without verification - backend handles that)
@@ -37,6 +39,7 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       user: null,
       isAuthenticated: false,
+      hasHydrated: false,
       login: (token, user) => {
         // Decode role from JWT if not provided
         const decoded = get().decodeToken(token)
@@ -59,9 +62,20 @@ export const useAuthStore = create<AuthState>()(
           role: (decoded.role as string) || 'user',
         }
       },
+      setHasHydrated: (state) => {
+        set({ hasHydrated: state })
+        // After hydration, update isAuthenticated based on token presence
+        const { token } = get()
+        if (token) {
+          set({ isAuthenticated: true })
+        }
+      },
     }),
     {
       name: 'admin-auth-storage',
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true)
+      },
     }
   )
 )
