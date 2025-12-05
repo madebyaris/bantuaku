@@ -6,6 +6,7 @@ import (
 
 	"github.com/bantuaku/backend/errors"
 	"github.com/bantuaku/backend/logger"
+	"github.com/bantuaku/backend/middleware"
 	"github.com/bantuaku/backend/models"
 	"github.com/bantuaku/backend/services/embedding"
 	"github.com/bantuaku/backend/services/kolosal"
@@ -64,8 +65,10 @@ type GetMessagesResponse struct {
 
 // StartConversation creates a new conversation
 func (h *Handler) StartConversation(w http.ResponseWriter, r *http.Request) {
-	_ = r.Context().Value("user_id")  // TODO: Use userID when implementing DB storage
-	_ = r.Context().Value("store_id") // TODO: Update to company_id
+	userID := middleware.GetUserID(r.Context())
+	companyID := middleware.GetCompanyID(r.Context())
+	_ = userID   // TODO: Use userID when implementing DB storage
+	_ = companyID // TODO: Use companyID when implementing DB storage
 
 	var req StartConversationRequest
 	if err := h.parseJSON(r, &req); err != nil {
@@ -96,8 +99,10 @@ func (h *Handler) StartConversation(w http.ResponseWriter, r *http.Request) {
 // SendMessage handles sending a message in a conversation with RAG integration
 func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	log := logger.With("request_id", r.Context().Value("request_id"))
-	_ = r.Context().Value("user_id")  // TODO: Use userID when implementing DB storage
-	_ = r.Context().Value("store_id") // TODO: Update to company_id
+	userID := middleware.GetUserID(r.Context())
+	companyID := middleware.GetCompanyID(r.Context())
+	_ = userID   // TODO: Use userID when implementing DB storage
+	_ = companyID // TODO: Use companyID when implementing DB storage
 
 	var req SendMessageRequest
 	if err := h.parseJSON(r, &req); err != nil {
@@ -200,8 +205,10 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 
 // GetConversations retrieves all conversations for a company
 func (h *Handler) GetConversations(w http.ResponseWriter, r *http.Request) {
-	_ = r.Context().Value("user_id")  // TODO: Use userID when implementing DB storage
-	_ = r.Context().Value("store_id") // TODO: Update to company_id
+	userID := middleware.GetUserID(r.Context())
+	companyID := middleware.GetCompanyID(r.Context())
+	_ = userID   // TODO: Use userID when implementing DB storage
+	_ = companyID // TODO: Use companyID when implementing DB storage
 
 	// TODO: Implement conversation retrieval from database
 	// For now, return empty list

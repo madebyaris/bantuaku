@@ -25,18 +25,26 @@ import {
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { api, DashboardSummary } from '@/lib/api'
+import { api, DashboardSummary, Sale } from '@/lib/api'
 import { formatCurrency, formatPercentage, cn } from '@/lib/utils'
 
 export function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [chartData, setChartData] = useState<Array<{ name: string; sales: number }>>([])
 
   useEffect(() => {
     async function loadData() {
       try {
-        const summaryData = await api.dashboard.summary()
+        const [summaryData, salesData] = await Promise.all([
+          api.dashboard.summary(),
+          api.sales.list(),
+        ])
         setSummary(summaryData)
+        
+        // Process sales data for chart (last 7 days)
+        const last7Days = processSalesForChart(salesData)
+        setChartData(last7Days)
       } catch (err) {
         console.error('Failed to load dashboard:', err)
       } finally {
@@ -46,6 +54,50 @@ export function DashboardPage() {
     loadData()
   }, [])
 
+  function processSalesForChart(sales: Sale[]): Array<{ name: string; sales: number }> {
+    // Get last 7 days
+    const days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+    const today = new Date()
+    today.setHours(0, 0, 0, 0) // Start of today
+    const sevenDaysAgo = new Date(today)
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6) // Include today, so 6 days back
+    
+    const last7Days: Date[] = []
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(sevenDaysAgo)
+      date.setDate(date.getDate() + i)
+      last7Days.push(date)
+    }
+
+    // Aggregate sales by day (only include sales from last 7 days)
+    const dailySales: { [key: string]: number } = {}
+    last7Days.forEach(date => {
+      const dateStr = date.toISOString().split('T')[0]
+      dailySales[dateStr] = 0
+    })
+
+    sales.forEach(sale => {
+      const saleDate = new Date(sale.sale_date)
+      saleDate.setHours(0, 0, 0, 0)
+      const dateStr = saleDate.toISOString().split('T')[0]
+      
+      // Only include sales from the last 7 days
+      if (saleDate >= sevenDaysAgo && saleDate <= today && dailySales.hasOwnProperty(dateStr)) {
+        dailySales[dateStr] += sale.quantity * sale.price
+      }
+    })
+
+    // Convert to chart format
+    return last7Days.map((date) => {
+      const dateStr = date.toISOString().split('T')[0]
+      const dayName = days[date.getDay()]
+      return {
+        name: dayName,
+        sales: dailySales[dateStr] || 0,
+      }
+    })
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -53,17 +105,6 @@ export function DashboardPage() {
       </div>
     )
   }
-
-  // Mock chart data - TODO: Replace with real sales data
-  const chartData = [
-    { name: 'Sen', sales: 4500000 },
-    { name: 'Sel', sales: 5200000 },
-    { name: 'Rab', sales: 4800000 },
-    { name: 'Kam', sales: 6100000 },
-    { name: 'Jum', sales: 7200000 },
-    { name: 'Sab', sales: 8500000 },
-    { name: 'Min', sales: 6800000 },
-  ]
 
   return (
     <div className="space-y-6 animate-fade-in-up">

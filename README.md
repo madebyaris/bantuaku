@@ -211,6 +211,22 @@ cp .env.example .env
 - `MAILJET_API_SECRET` - Get from https://www.mailjet.com/
 - `APP_BASE_URL` - Base URL for email links (e.g., `http://localhost:3000`)
 
+**RAG & Embeddings (New):**
+- `EMBEDDING_PROVIDER` - Embedding provider: `kolosal` (default), `openai`, `cohere`
+- `EMBEDDING_API_KEY` - API key for embedding provider (falls back to `KOLOSAL_API_KEY` if empty)
+
+**Forecasting Service (New):**
+- `FORECASTING_SERVICE_URL` - URL for Python forecasting microservice (default: `http://localhost:8001`, use `http://forecasting:8000` in Docker)
+
+**Regulations Scraper (New):**
+- `REGULATIONS_SCRAPER_ENABLED` - Enable regulations scraper: `true` (default) or `false`
+- `REGULATIONS_SCRAPER_SCHEDULE` - Cron schedule for scraper (default: `0 2 * * *` - daily at 2 AM)
+- `REGULATIONS_BASE_URL` - Base URL for regulations (default: `https://peraturan.go.id`)
+
+**Stripe Billing (New):**
+- `STRIPE_SECRET_KEY` - Stripe secret key for billing (test mode)
+- `STRIPE_WEBHOOK_SECRET` - Stripe webhook secret for subscription events
+
 **Quick setup:**
 ```env
 # Minimum required for local development
@@ -221,6 +237,17 @@ JWT_SECRET=your-secure-secret-here
 MAILJET_API_KEY=your-mailjet-api-key
 MAILJET_API_SECRET=your-mailjet-api-secret
 APP_BASE_URL=http://localhost:3000
+
+# Forecasting service (for Docker, use service name)
+FORECASTING_SERVICE_URL=http://forecasting:8000
+
+# Optional: Stripe billing (test mode)
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# Optional: Regulations scraper
+REGULATIONS_SCRAPER_ENABLED=true
+REGULATIONS_SCRAPER_SCHEDULE=0 2 * * *
 ```
 
 See `.env.example` for complete configuration options and documentation.
