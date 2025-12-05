@@ -108,5 +108,28 @@ services:
       timeout: 5s
       retries: 5
 
+  # pgAdmin - Development only (not for production)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin-1
+    profiles:
+      - dev
+    ports:
+      - "5050:80"
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@bantuaku.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_CONFIG_SERVER_MODE=False
+      - PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED=False
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - ./docker/pgadmin/pgpass:/tmp/pgpass_src:ro
+    entrypoint: /bin/sh -c "cp /tmp/pgpass_src /var/lib/pgadmin/pgpass && chmod 600 /var/lib/pgadmin/pgpass && /entrypoint.sh"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   db_data:
+  pgadmin_data:
