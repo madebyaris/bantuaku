@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	KolosalAPIBaseURL = "https://api.kolosal.ai"
+	KolosalAPIBaseURL = "https://api.kolosal.ai/v1"
 	DefaultTimeout    = 30 * time.Second
 )
 
@@ -49,17 +49,31 @@ type ChatCompletionMessage struct {
 
 // ChatCompletionResponse represents a chat completion response
 type ChatCompletionResponse struct {
+	ID      string       `json:"id,omitempty"`
+	Object  string       `json:"object,omitempty"`
+	Created int64        `json:"created,omitempty"`
+	Model   string       `json:"model,omitempty"`
 	Choices []ChatChoice `json:"choices"`
+	Usage   *Usage       `json:"usage,omitempty"`
 }
 
 // ChatChoice represents a choice in the chat completion response
 type ChatChoice struct {
-	Message ChatCompletionMessage `json:"message"`
+	Index        int                   `json:"index,omitempty"`
+	Message      ChatCompletionMessage `json:"message"`
+	FinishReason string                `json:"finish_reason,omitempty"`
+}
+
+// Usage represents token usage information
+type Usage struct {
+	PromptTokens     int `json:"prompt_tokens,omitempty"`
+	CompletionTokens int `json:"completion_tokens,omitempty"`
+	TotalTokens      int `json:"total_tokens,omitempty"`
 }
 
 // CreateChatCompletion calls Kolosal.ai chat completions API
 func (c *Client) CreateChatCompletion(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, error) {
-	url := fmt.Sprintf("%s/v1/chat/completions", c.BaseURL)
+	url := fmt.Sprintf("%s/chat/completions", c.BaseURL)
 
 	reqBody, err := json.Marshal(req)
 	if err != nil {
@@ -74,20 +88,43 @@ func (c *Client) CreateChatCompletion(ctx context.Context, req ChatCompletionReq
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
 
+	// Log request details for debugging
+	fmt.Printf("[Kolosal Chat] Request URL: %s\n", url)
+	fmt.Printf("[Kolosal Chat] Request Body Length: %d bytes\n", len(reqBody))
+
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API error: %d - %s", resp.StatusCode, string(body))
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("[Kolosal Chat] Error Response Status: %d\n", resp.StatusCode)
+		fmt.Printf("[Kolosal Chat] Error Response Body: %s\n", string(bodyBytes))
+		return nil, fmt.Errorf("API error: %d - %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	fmt.Printf("[Kolosal Chat] Success Response Status: %d\n", resp.StatusCode)
+	fmt.Printf("[Kolosal Chat] Response Body Length: %d bytes\n", len(bodyBytes))
+
 	var chatResp ChatCompletionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w, body: %s", err, string(bodyBytes))
+	}
+
+	// Validate response has choices
+	if len(chatResp.Choices) == 0 {
+		return nil, fmt.Errorf("empty choices in response: %s", string(bodyBytes))
+	}
+
+	// Validate first choice has message content
+	if chatResp.Choices[0].Message.Content == "" {
+		return nil, fmt.Errorf("empty message content in response: %s", string(bodyBytes))
 	}
 
 	return &chatResp, nil

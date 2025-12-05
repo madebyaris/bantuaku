@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, Loader2, Sparkles, User, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useChatStore, ChatMessage } from '@/state/chat'
 
@@ -19,9 +18,32 @@ const suggestedQuestions = [
 ]
 
 export function ChatInterface({ isWidget = false, className }: ChatInterfaceProps) {
-  const { messages, loading, addMessage, setLoading } = useChatStore()
+  const {
+    messages,
+    loading,
+    currentConversationId,
+    addMessage,
+    setLoading,
+    initializeConversation,
+    loadMessages,
+  } = useChatStore()
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [initializing, setInitializing] = useState(true)
+
+  // Initialize conversation on mount (single continuous chat)
+  useEffect(() => {
+    const init = async () => {
+      try {
+        await initializeConversation()
+      } catch (err) {
+        console.error('Failed to initialize conversation:', err)
+      } finally {
+        setInitializing(false)
+      }
+    }
+    init()
+  }, [initializeConversation])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -51,7 +73,7 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
   }, [])
 
   async function sendMessage(text: string) {
-    if (!text.trim() || loading) return
+    if (!text.trim() || loading || !currentConversationId) return
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -65,19 +87,19 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
     setLoading(true)
 
     try {
-      const response = await api.ai.analyze(text)
+      const { api } = await import('@/lib/api')
+      const response = await api.chat.sendMessage(currentConversationId, text.trim())
       
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        text: response.answer,
-        confidence: response.confidence,
-        dataSources: response.data_sources,
+        text: response.assistant_reply,
         timestamp: new Date(),
       }
 
       addMessage(assistantMessage)
     } catch (err) {
+      console.error('Failed to send message:', err)
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -93,6 +115,15 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     sendMessage(input)
+  }
+
+  if (initializing) {
+    return (
+      <div className={cn("flex flex-col items-center justify-center h-full", className)}>
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+        <p className="mt-4 text-slate-400">Memuat chat...</p>
+      </div>
+    )
   }
 
   return (
@@ -215,11 +246,11 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ketik pertanyaan..."
-            disabled={loading}
+            disabled={loading || !currentConversationId}
             className="flex-1 bg-white/5 border-white/10 text-slate-100 placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20"
             autoFocus={!isWidget}
           />
-          <Button type="submit" disabled={loading || !input.trim()} className="bg-emerald-500 hover:bg-emerald-400 text-black">
+          <Button type="submit" disabled={loading || !input.trim() || !currentConversationId} className="bg-emerald-500 hover:bg-emerald-400 text-black">
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
@@ -228,9 +259,9 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
           </Button>
         </form>
         {!isWidget && (
-            <p className="text-xs text-slate-500 text-center mt-2">
+          <p className="text-xs text-slate-500 text-center mt-2">
             AI dapat membuat kesalahan. Verifikasi informasi penting.
-            </p>
+          </p>
         )}
       </div>
     </div>

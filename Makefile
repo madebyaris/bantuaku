@@ -25,7 +25,8 @@ kill-ports:
 	@echo "Ports cleared"
 
 dev-backend:
-	cd backend && go run main.go
+	@which air > /dev/null || (echo "Installing air for hot reload..." && go install github.com/cosmtrek/air@latest)
+	cd backend && air
 
 dev-frontend:
 	cd frontend && npm run dev

@@ -26,10 +26,11 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     body: options.body ? JSON.stringify(options.body) : undefined,
   })
   
-  if (response.status === 401) {
+  if (response.status === 401 || response.status === 419) {
+    // 401 = Unauthorized, 419 = Token Expired
     logout()
     window.location.href = '/login'
-    throw new Error('Unauthorized')
+    throw new Error(response.status === 419 ? 'Token has expired' : 'Unauthorized')
   }
   
   if (!response.ok) {
@@ -172,10 +173,44 @@ export const api = {
   },
   
   chat: {
+    startConversation: (purpose: string) =>
+      request<{
+        conversation_id: string
+        title: string
+        created_at: string
+      }>('/chat/start', {
+        method: 'POST',
+        body: { purpose },
+      }),
+    sendMessage: (conversationId: string, message: string) =>
+      request<{
+        message_id: string
+        assistant_reply: string
+        structured_payload?: Record<string, unknown>
+        citations?: Array<{ text: string; source: string }>
+        rag_used: boolean
+      }>('/chat/message', {
+        method: 'POST',
+        body: { conversation_id: conversationId, message },
+      }),
     conversations: {
-      list: () => request<Conversation[]>('/chat/conversations'),
+      list: (limit?: number, offset?: number) => {
+        const params = new URLSearchParams()
+        if (limit !== undefined) params.append('limit', limit.toString())
+        if (offset !== undefined) params.append('offset', offset.toString())
+        const query = params.toString()
+        return request<{
+          conversations: ConversationSummary[]
+        }>(`/chat/conversations${query ? `?${query}` : ''}`).then(res => res.conversations || [])
+      },
       get: (id: string) => request<Conversation>(`/chat/conversations/${id}`),
-      messages: (conversationId: string) => request<Message[]>(`/chat/messages?conversation_id=${conversationId}`),
+      messages: (conversationId: string, limit?: number, offset?: number) => {
+        const params = new URLSearchParams()
+        params.append('conversation_id', conversationId)
+        if (limit !== undefined) params.append('limit', limit.toString())
+        if (offset !== undefined) params.append('offset', offset.toString())
+        return request<{ messages: Message[] }>(`/chat/messages?${params.toString()}`).then(res => res.messages || [])
+      },
     },
   },
   
@@ -395,6 +430,9 @@ export interface InsightsCounts {
 export interface ConversationSummary {
   id: string
   title: string
+  purpose?: string
+  created_at: string
+  last_message_at: string
   last_message?: string
   updated_at: string
 }
