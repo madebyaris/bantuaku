@@ -10,15 +10,17 @@ import (
 
 	"github.com/bantuaku/backend/errors"
 	"github.com/bantuaku/backend/logger"
+	"github.com/bantuaku/backend/middleware"
 	"github.com/bantuaku/backend/models"
 	"github.com/bantuaku/backend/services/kolosal"
+	"github.com/bantuaku/backend/services/usage"
 
 	"github.com/google/uuid"
 )
 
 const (
-	maxFileSize = 10 * 1024 * 1024 // 10MB
-	uploadDir   = "./uploads"
+	maxFileSizeDefault = 10 * 1024 * 1024 // 10MB default
+	uploadDir          = "./uploads"
 )
 
 // UploadFileResponse represents the response when uploading a file
@@ -33,11 +35,22 @@ type UploadFileResponse struct {
 
 // UploadFile handles file uploads (CSV/XLSX/PDF)
 func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
-	_ = r.Context().Value("user_id")  // TODO: Use userID when implementing DB storage
-	_ = r.Context().Value("store_id") // TODO: Update to company_id
+	ctx := r.Context()
+	companyID := middleware.GetCompanyID(ctx)
 
-	// Parse multipart form
-	err := r.ParseMultipartForm(maxFileSize)
+	// Check upload usage limit
+	usageService := usage.NewService(h.db)
+	canUpload, limitMsg, err := usageService.CheckUploadLimit(ctx, companyID)
+	if err != nil {
+		logger.Warn("Failed to check upload limit", "error", err.Error())
+		// Continue on error - don't block user
+	} else if !canUpload {
+		h.respondError(w, errors.NewAppError(errors.ErrCodeForbidden, limitMsg, "upload_limit_exceeded"), r)
+		return
+	}
+
+	// Parse multipart form with a large limit (will check actual file size later)
+	err = r.ParseMultipartForm(100 * 1024 * 1024) // 100MB parse limit
 	if err != nil {
 		h.respondError(w, fmt.Errorf("failed to parse multipart form: %w", err), r)
 		return
@@ -50,9 +63,17 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Validate file size
-	if header.Size > maxFileSize {
-		h.respondError(w, fmt.Errorf("file size exceeds maximum of %d bytes", maxFileSize), r)
+	// Check file size against plan limit
+	canUploadSize, sizeMsg, err := usageService.CheckFileSizeLimit(ctx, companyID, header.Size)
+	if err != nil {
+		logger.Warn("Failed to check file size limit", "error", err.Error())
+		// Continue on error - don't block user, use default limit
+		if header.Size > maxFileSizeDefault {
+			h.respondError(w, fmt.Errorf("file size exceeds maximum of %d bytes", maxFileSizeDefault), r)
+			return
+		}
+	} else if !canUploadSize {
+		h.respondError(w, errors.NewAppError(errors.ErrCodeForbidden, sizeMsg, "file_size_exceeded"), r)
 		return
 	}
 

@@ -98,13 +98,14 @@ N/A - No database changes
 - [x] Update `backend/go.mod`: Changed `go 1.22` → `go 1.25` ✅
 - [x] Update `backend/Dockerfile.dev`: Changed base image to `golang:1.25-alpine` and Air to `@latest` ✅
 - [x] Update `Makefile`: Changed Air version to `@latest` ✅
+- [x] Fix Air repository migration: Updated from `github.com/cosmtrek/air` to `github.com/air-verse/air` ✅
 - [x] Run `go mod tidy` in backend directory ✅
 - [ ] Test Docker build: `make dev` (pending user test)
 - [ ] Test local build: `make dev-backend` (pending user test)
 - [ ] Verify no breaking changes in functionality (pending user test)
 
 ### Blockers
-- None - All code changes completed successfully
+- ~~Air repository migration issue~~ - Fixed: Updated to new repository `github.com/air-verse/air`
 
 **See**: [.sdd/IMPLEMENTATION_GUIDE.md](mdc:.sdd/IMPLEMENTATION_GUIDE.md) for detailed execution rules.
 

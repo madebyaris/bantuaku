@@ -15,9 +15,17 @@ const pageTitles: Record<string, { title: string; description: string }> = {
     title: 'Subscriptions',
     description: 'Kelola langganan dan pembayaran',
   },
+  '/plans': {
+    title: 'Subscription Plans',
+    description: 'Kelola paket langganan dan batas penggunaan',
+  },
   '/audit-logs': {
     title: 'Audit Logs',
     description: 'Riwayat aktivitas sistem',
+  },
+  '/settings': {
+    title: 'Settings',
+    description: 'Konfigurasi pengaturan aplikasi',
   },
 }
 

@@ -11,8 +11,11 @@ import (
 	"github.com/bantuaku/backend/logger"
 	"github.com/bantuaku/backend/middleware"
 	"github.com/bantuaku/backend/models"
+	"github.com/bantuaku/backend/services/chat"
 	"github.com/bantuaku/backend/services/embedding"
-	"github.com/bantuaku/backend/services/kolosal"
+	"github.com/bantuaku/backend/services/settings"
+	"github.com/bantuaku/backend/services/tokenusage"
+	"github.com/bantuaku/backend/services/usage"
 	"github.com/bantuaku/backend/validation"
 
 	"github.com/google/uuid"
@@ -89,6 +92,21 @@ func (h *Handler) StartConversation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+
+	// Check if database connection is available
+	if h.db == nil {
+		log.Error("Database connection not available")
+		h.respondError(w, errors.NewAppError(errors.ErrCodeInternal, "Database connection not available", ""), r)
+		return
+	}
+
+	pool := h.db.Pool()
+	if pool == nil {
+		log.Error("Database pool not available")
+		h.respondError(w, errors.NewAppError(errors.ErrCodeInternal, "Database pool not available", ""), r)
+		return
+	}
+
 	conversationID := uuid.New().String()
 	title := "New Conversation"
 	if req.Purpose == "onboarding" {
@@ -102,13 +120,13 @@ func (h *Handler) StartConversation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now()
-	_, err := h.db.Pool().Exec(ctx, `
+	_, err := pool.Exec(ctx, `
 		INSERT INTO conversations (id, company_id, user_id, title, purpose, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`, conversationID, companyID, userID, title, req.Purpose, now, now)
 
 	if err != nil {
-		log.Error("Failed to create conversation", "error", err)
+		log.Error("Failed to create conversation", "error", err, "company_id", companyID, "user_id", userID)
 		h.respondError(w, errors.NewAppError(errors.ErrCodeInternal, "Failed to create conversation", err.Error()), r)
 		return
 	}
@@ -125,8 +143,20 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	log := logger.With("request_id", r.Context().Value("request_id"))
 	userID := middleware.GetUserID(r.Context())
 	companyID := middleware.GetCompanyID(r.Context())
-	_ = userID    // TODO: Use userID when implementing DB storage
-	_ = companyID // TODO: Use companyID when implementing DB storage
+	_ = userID // TODO: Use userID when implementing DB storage
+
+	ctx := r.Context()
+
+	// Check chat usage limit
+	usageService := usage.NewService(h.db)
+	canChat, limitMsg, err := usageService.CheckChatLimit(ctx, companyID)
+	if err != nil {
+		log.Warn("Failed to check chat limit", "error", err)
+		// Continue on error - don't block user
+	} else if !canChat {
+		h.respondError(w, errors.NewAppError(errors.ErrCodeForbidden, limitMsg, "chat_limit_exceeded"), r)
+		return
+	}
 
 	var req SendMessageRequest
 	if err := h.parseJSON(r, &req); err != nil {
@@ -143,19 +173,19 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	var structuredPayload map[string]interface{}
 	var citations []Citation
 	ragUsed := false
-
-	ctx := r.Context()
+	var model, provider string            // Track model and provider for token logging
+	var resp *chat.ChatCompletionResponse // Track response for token logging
 
 	// Save user message to database
 	userMessageID := uuid.New().String()
-	_, err := h.db.Pool().Exec(ctx, `
+	_, dbErr := h.db.Pool().Exec(ctx, `
 		INSERT INTO messages (id, conversation_id, sender, content, created_at)
 		VALUES ($1, $2, $3, $4, $5)
 	`, userMessageID, req.ConversationID, "user", req.Message, time.Now())
 
-	if err != nil {
-		log.Error("Failed to save user message", "error", err)
-		h.respondError(w, errors.NewAppError(errors.ErrCodeInternal, "Failed to save message", err.Error()), r)
+	if dbErr != nil {
+		log.Error("Failed to save user message", "error", dbErr)
+		h.respondError(w, errors.NewAppError(errors.ErrCodeInternal, "Failed to save message", dbErr.Error()), r)
 		return
 	}
 
@@ -182,10 +212,15 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Use Kolosal.ai for chat completion
-	if h.config.KolosalAPIKey != "" {
-		client := kolosal.NewClient(h.config.KolosalAPIKey)
-
+	// Use chat provider factory to get the configured provider (OpenRouter or Kolosal)
+	settingsService := settings.NewService(h.db)
+	chatProvider, err := chat.NewChatProvider(ctx, h.config, settingsService)
+	if err != nil {
+		log.Error("Failed to initialize chat provider",
+			"error", err,
+			"conversation_id", req.ConversationID)
+		assistantReply = fmt.Sprintf("Maaf, terjadi kesalahan saat memproses pesan Anda. Error: %v. Silakan coba lagi atau hubungi support.", err)
+	} else {
 		var systemPrompt, userPrompt string
 		if ragService != nil && ragContext != "" {
 			// Build prompt with RAG context
@@ -198,15 +233,39 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 			log.Debug("Using basic prompt (no RAG)")
 		}
 
-		log.Info("Calling Kolosal.ai chat completion",
-			"model", "default",
+		// Determine model and provider based on settings
+		// Get provider from settings to determine which model to use
+		model = h.config.OpenRouterModelChat // Default for OpenRouter (from config)
+		provider = "openrouter"              // Default provider
+		if model == "" {
+			model = "openai/gpt-4o-mini" // Fallback default
+		}
+
+		if providerSetting, _ := settingsService.GetSetting(ctx, "ai_provider"); providerSetting != "" {
+			var settingData map[string]interface{}
+			if json.Unmarshal([]byte(providerSetting), &settingData) == nil {
+				if p, ok := settingData["provider"].(string); ok && p == "kolosal" {
+					model = "GLM 4.6" // Kolosal model
+					provider = "kolosal"
+				}
+			}
+		} else {
+			// If no setting, check API keys to infer provider
+			if h.config.KolosalAPIKey != "" && h.config.OpenRouterAPIKey == "" {
+				model = "GLM 4.6" // Only Kolosal key set
+				provider = "kolosal"
+			}
+		}
+
+		log.Info("Calling chat completion",
+			"model", model,
 			"message_length", len(req.Message),
 			"conversation_id", req.ConversationID,
 			"user_message", req.Message)
 
-		resp, err := client.CreateChatCompletion(ctx, kolosal.ChatCompletionRequest{
-			Model: "default",
-			Messages: []kolosal.ChatCompletionMessage{
+		resp, err = chatProvider.CreateChatCompletion(ctx, chat.ChatCompletionRequest{
+			Model: model,
+			Messages: []chat.ChatCompletionMessage{
 				{Role: "system", Content: systemPrompt},
 				{Role: "user", Content: userPrompt},
 			},
@@ -215,7 +274,7 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		})
 
 		if err != nil {
-			log.Error("Kolosal.ai chat completion failed",
+			log.Error("Chat completion failed",
 				"error", err,
 				"conversation_id", req.ConversationID,
 				"error_details", err.Error(),
@@ -223,12 +282,12 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 			// Return error to user instead of generic template
 			assistantReply = fmt.Sprintf("Maaf, terjadi kesalahan saat memproses pesan Anda. Error: %v. Silakan coba lagi atau hubungi support.", err)
 		} else if resp == nil {
-			log.Error("Kolosal.ai returned nil response",
+			log.Error("Chat provider returned nil response",
 				"conversation_id", req.ConversationID,
 				"user_message", req.Message)
 			assistantReply = "Maaf, terjadi kesalahan saat memproses pesan Anda. Response kosong dari server. Silakan coba lagi."
 		} else if len(resp.Choices) == 0 {
-			log.Error("Kolosal.ai returned empty choices",
+			log.Error("Chat provider returned empty choices",
 				"conversation_id", req.ConversationID,
 				"response_id", resp.ID,
 				"response_model", resp.Model,
@@ -237,14 +296,14 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		} else {
 			assistantReply = resp.Choices[0].Message.Content
 			if assistantReply == "" {
-				log.Error("Kolosal.ai returned empty content",
+				log.Error("Chat provider returned empty content",
 					"conversation_id", req.ConversationID,
 					"choice_index", resp.Choices[0].Index,
 					"finish_reason", resp.Choices[0].FinishReason,
 					"user_message", req.Message)
 				assistantReply = "Maaf, terjadi kesalahan saat memproses pesan Anda. Response kosong. Silakan coba lagi."
 			} else {
-				log.Info("Kolosal.ai chat completion successful",
+				log.Info("Chat completion successful",
 					"conversation_id", req.ConversationID,
 					"response_length", len(assistantReply),
 					"response_preview", func() string {
@@ -254,7 +313,7 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 						return assistantReply
 					}(),
 					"rag_used", ragUsed,
-					"model", resp.Model)
+					"model", model)
 			}
 		}
 
@@ -262,9 +321,6 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		if len(retrievedChunks) > 0 {
 			citations = ExtractCitations(retrievedChunks)
 		}
-	} else {
-		log.Warn("Kolosal API key not configured")
-		assistantReply = "Terima kasih atas pesan Anda. Fitur AI chat sedang dalam pengembangan. Silakan coba lagi nanti."
 	}
 
 	// Save assistant reply to database
@@ -281,6 +337,21 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Error("Failed to save assistant message", "error", err)
 		// Continue anyway - message was sent, just logging failed
+	}
+
+	// Log token usage if available
+	if resp != nil && resp.Usage != nil {
+		tokenService := tokenusage.NewService(h.db)
+		promptTokens := resp.Usage.PromptTokens
+		completionTokens := resp.Usage.CompletionTokens
+		totalTokens := resp.Usage.TotalTokens
+		if totalTokens == 0 {
+			totalTokens = promptTokens + completionTokens
+		}
+		if err := tokenService.CreateTokenUsage(ctx, companyID, &req.ConversationID, &assistantMessageID, model, provider, promptTokens, completionTokens, totalTokens); err != nil {
+			log.Warn("Failed to log token usage", "error", err)
+			// Don't fail the request if token logging fails
+		}
 	}
 
 	// Update conversation updated_at timestamp
@@ -339,16 +410,38 @@ func (h *Handler) GetConversations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	rows, err := h.db.Pool().Query(ctx, `
-		SELECT id, title, purpose, created_at, updated_at
-		FROM conversations
-		WHERE company_id = $1
-		ORDER BY updated_at DESC
+
+	// Check if database connection is available
+	if h.db == nil {
+		log.Error("Database connection not available")
+		h.respondError(w, errors.NewAppError(errors.ErrCodeInternal, "Database connection not available", ""), r)
+		return
+	}
+
+	pool := h.db.Pool()
+	if pool == nil {
+		log.Error("Database pool not available")
+		h.respondError(w, errors.NewAppError(errors.ErrCodeInternal, "Database pool not available", ""), r)
+		return
+	}
+
+	rows, err := pool.Query(ctx, `
+		SELECT 
+			c.id, 
+			c.title, 
+			c.purpose, 
+			c.created_at, 
+			COALESCE(MAX(m.created_at), c.updated_at) as last_message_at
+		FROM conversations c
+		LEFT JOIN messages m ON m.conversation_id = c.id
+		WHERE c.company_id = $1
+		GROUP BY c.id, c.title, c.purpose, c.created_at, c.updated_at
+		ORDER BY last_message_at DESC
 		LIMIT $2 OFFSET $3
 	`, companyID, limit, offset)
 
 	if err != nil {
-		log.Error("Failed to fetch conversations", "error", err)
+		log.Error("Failed to fetch conversations", "error", err, "company_id", companyID)
 		h.respondError(w, errors.NewAppError(errors.ErrCodeInternal, "Failed to fetch conversations", err.Error()), r)
 		return
 	}
@@ -358,10 +451,16 @@ func (h *Handler) GetConversations(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var conv ConversationSummary
 		if err := rows.Scan(&conv.ID, &conv.Title, &conv.Purpose, &conv.CreatedAt, &conv.LastMessageAt); err != nil {
-			log.Warn("Failed to scan conversation row", "error", err)
+			log.Error("Failed to scan conversation row", "error", err)
 			continue
 		}
 		conversations = append(conversations, conv)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Error("Error iterating conversation rows", "error", err)
+		h.respondError(w, errors.NewAppError(errors.ErrCodeInternal, "Failed to process conversations", err.Error()), r)
+		return
 	}
 
 	h.respondJSON(w, http.StatusOK, GetConversationsResponse{

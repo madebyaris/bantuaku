@@ -23,8 +23,9 @@ import {
 } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { toast } from "@/components/ui/toaster";
-import { formatDate } from "@/lib/utils";
+import { formatDateShort } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/state/auth";
 
 interface User {
   id: string;
@@ -33,6 +34,8 @@ interface User {
   status: string;
   store_name?: string;
   industry?: string;
+  subscription_plan?: string;
+  subscription_status?: string;
   created_at: string;
   updated_at?: string;
 }
@@ -55,6 +58,7 @@ const initialFormState = {
 };
 
 export function UsersPage() {
+  const currentUser = useAuthStore((state) => state.user);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -170,6 +174,15 @@ export function UsersPage() {
   }
 
   async function handleSuspend(id: string) {
+    // Prevent admins from suspending themselves
+    if (currentUser && currentUser.id === id) {
+      toast({
+        title: "Error",
+        description: "You cannot suspend your own account",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!confirm("Are you sure you want to suspend this user?")) return;
     try {
       await api.admin.users.updateStatus(id, "suspended");
@@ -210,30 +223,16 @@ export function UsersPage() {
     }
   }
 
-  async function handleUpgradeSubscription(id: string) {
-    if (!confirm("Upgrade this user's subscription to Pro?")) return;
-    try {
-      await api.admin.users.upgradeSubscription(id);
-      toast({
-        title: "Success",
-        description: "Subscription upgraded to Pro",
-        variant: "success",
-      });
-      loadUsers();
-      setActionUser(null);
-    } catch (error) {
+  async function handleDelete(id: string) {
+    // Prevent admins from deleting themselves
+    if (currentUser && currentUser.id === id) {
       toast({
         title: "Error",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to upgrade subscription",
+        description: "You cannot delete your own account",
         variant: "destructive",
       });
+      return;
     }
-  }
-
-  async function handleDelete(id: string) {
     if (!confirm("Are you sure you want to delete this user?")) return;
     try {
       await api.admin.users.delete(id);
@@ -285,6 +284,22 @@ export function UsersPage() {
     return styles[status as keyof typeof styles] || styles.active;
   };
 
+  const getSubscriptionBadge = (plan?: string, status?: string) => {
+    const planColors = {
+      free: "bg-slate-500/20 text-slate-400 border-slate-500/20",
+      pro: "bg-emerald-500/20 text-emerald-400 border-emerald-500/20",
+      enterprise: "bg-purple-500/20 text-purple-400 border-purple-500/20",
+    };
+    const planLabel = plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : "Free";
+    const color = planColors[plan as keyof typeof planColors] || planColors.free;
+    
+    return {
+      wrapper: `inline-flex px-2 py-1 rounded-full text-xs font-medium border ${color}`,
+      label: planLabel,
+      status: status || "",
+    };
+  };
+
   return (
     <div className="space-y-6 animate-fade-in-up">
       <div className="flex items-center justify-between">
@@ -326,6 +341,9 @@ export function UsersPage() {
                   </th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-slate-300">
                     Status
+                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-slate-300">
+                    Subscription
                   </th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-slate-300">
                     Created
@@ -386,8 +404,25 @@ export function UsersPage() {
                         );
                       })()}
                     </td>
+                    <td className="py-3 px-4">
+                      {(() => {
+                        const subBadge = getSubscriptionBadge(user.subscription_plan, user.subscription_status);
+                        return (
+                          <div className="flex flex-col gap-1">
+                            <span className={cn(subBadge.wrapper)}>
+                              {subBadge.label}
+                            </span>
+                            {subBadge.status && (
+                              <span className="text-xs text-slate-500">
+                                {subBadge.status}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td className="py-3 px-4 text-sm text-slate-400">
-                      {formatDate(user.created_at)}
+                      {formatDateShort(user.created_at)}
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-end gap-2">
@@ -770,6 +805,8 @@ export function UsersPage() {
                     variant="outline"
                     className="w-full justify-start gap-3 text-red-400 border-white/10 hover:bg-red-500/10 hover:border-red-500/30"
                     onClick={() => handleSuspend(actionUser.id)}
+                    disabled={currentUser?.id === actionUser.id}
+                    title={currentUser?.id === actionUser.id ? "You cannot suspend your own account" : ""}
                   >
                     <Ban className="w-4 h-4" />
                     Suspend user
@@ -786,16 +823,10 @@ export function UsersPage() {
                 )}
                 <Button
                   variant="outline"
-                  className="w-full justify-start gap-3 text-amber-400 border-white/10 hover:bg-amber-500/10 hover:border-amber-500/30"
-                  onClick={() => handleUpgradeSubscription(actionUser.id)}
-                >
-                  <Crown className="w-4 h-4" />
-                  Upgrade to Pro
-                </Button>
-                <Button
-                  variant="outline"
                   className="w-full justify-start gap-3 text-red-400 border-white/10 hover:bg-red-500/10 hover:border-red-500/30"
                   onClick={() => handleDelete(actionUser.id)}
+                  disabled={currentUser?.id === actionUser.id}
+                  title={currentUser?.id === actionUser.id ? "You cannot delete your own account" : ""}
                 >
                   <Trash2 className="w-4 h-4" />
                   Delete user

@@ -49,7 +49,7 @@ func main() {
 		log.Warn("Failed to connect to Redis", "error", err)
 		// Continue without Redis for now
 	} else {
-	defer redis.Close()
+		defer redis.Close()
 		log.Info("Redis connection established")
 	}
 
@@ -103,7 +103,7 @@ func main() {
 	// Forecasting
 	mux.HandleFunc("GET /api/v1/forecasts/{product_id}", middleware.Auth(cfg.JWTSecret, h.GetForecast))
 	mux.HandleFunc("GET /api/v1/recommendations", middleware.Auth(cfg.JWTSecret, h.GetRecommendations))
-	
+
 	// Advanced Forecasting (12-month)
 	mux.HandleFunc("GET /api/v1/forecasts/monthly", middleware.Auth(cfg.JWTSecret, h.GetMonthlyForecasts))
 	mux.HandleFunc("POST /api/v1/forecasts/monthly/generate", middleware.Auth(cfg.JWTSecret, h.GenerateMonthlyForecast))
@@ -162,7 +162,7 @@ func main() {
 	adminAuth := func(handler http.HandlerFunc) http.Handler {
 		return adminRateLimit(middleware.Auth(cfg.JWTSecret, middleware.RequireAdmin(handler)))
 	}
-	
+
 	mux.Handle("GET /api/v1/admin/users", adminAuth(adminHandler.ListUsers))
 	mux.Handle("GET /api/v1/admin/users/{id}", adminAuth(adminHandler.GetUser))
 	mux.Handle("POST /api/v1/admin/users", adminAuth(adminHandler.CreateUser))
@@ -172,19 +172,36 @@ func main() {
 	mux.Handle("PUT /api/v1/admin/users/{id}/upgrade-subscription", adminAuth(adminHandler.UpgradeUserSubscription))
 	mux.Handle("DELETE /api/v1/admin/users/{id}", adminAuth(adminHandler.DeleteUser))
 	mux.Handle("GET /api/v1/admin/stats", adminAuth(adminHandler.GetStats))
-	
+
+	mux.Handle("GET /api/v1/admin/subscriptions/stats", adminAuth(adminHandler.GetSubscriptionStats))
 	mux.Handle("GET /api/v1/admin/subscriptions", adminAuth(adminHandler.ListSubscriptions))
 	mux.Handle("GET /api/v1/admin/subscriptions/{id}", adminAuth(adminHandler.GetSubscription))
+	mux.Handle("GET /api/v1/admin/subscriptions/{id}/transactions", adminAuth(adminHandler.GetSubscriptionTransactions))
 	mux.Handle("POST /api/v1/admin/subscriptions", adminAuth(adminHandler.CreateSubscription))
 	mux.Handle("PUT /api/v1/admin/subscriptions/{id}/status", adminAuth(adminHandler.UpdateSubscriptionStatus))
-	
+
+	// Admin chat usage and token tracking
+	mux.Handle("GET /api/v1/admin/chat-usage", adminAuth(adminHandler.GetChatUsage))
+	mux.Handle("GET /api/v1/admin/token-usage", adminAuth(adminHandler.GetTokenUsage))
+
+	// Admin subscription plans CRUD
+	mux.Handle("GET /api/v1/admin/plans", adminAuth(adminHandler.ListPlans))
+	mux.Handle("GET /api/v1/admin/plans/{id}", adminAuth(adminHandler.GetPlan))
+	mux.Handle("POST /api/v1/admin/plans", adminAuth(adminHandler.CreatePlan))
+	mux.Handle("PUT /api/v1/admin/plans/{id}", adminAuth(adminHandler.UpdatePlan))
+	mux.Handle("DELETE /api/v1/admin/plans/{id}", adminAuth(adminHandler.DeletePlan))
+
 	mux.Handle("GET /api/v1/admin/audit-logs", adminAuth(adminHandler.ListAuditLogs))
+
+	// Admin settings routes
+	mux.Handle("GET /api/v1/admin/settings/ai-provider", adminAuth(adminHandler.GetAIProvider))
+	mux.Handle("PUT /api/v1/admin/settings/ai-provider", adminAuth(adminHandler.UpdateAIProvider))
 
 	// Billing routes (if Stripe is configured)
 	if billingHandler != nil {
 		mux.HandleFunc("POST /api/v1/billing/checkout", middleware.Auth(cfg.JWTSecret, billingHandler.CreateCheckoutSession))
 		mux.HandleFunc("GET /api/v1/billing/subscription", middleware.Auth(cfg.JWTSecret, billingHandler.GetSubscription))
-		mux.HandleFunc("GET /api/v1/billing/plans", billingHandler.ListPlans) // Public endpoint
+		mux.HandleFunc("GET /api/v1/billing/plans", billingHandler.ListPlans)        // Public endpoint
 		mux.HandleFunc("POST /api/v1/billing/webhook", billingHandler.HandleWebhook) // Webhook doesn't need auth
 	}
 

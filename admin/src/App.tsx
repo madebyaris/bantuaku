@@ -5,7 +5,9 @@ import { LoginPage } from '@/pages/auth/LoginPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { UsersPage } from '@/pages/UsersPage'
 import { SubscriptionsPage } from '@/pages/SubscriptionsPage'
+import { SubscriptionPlansPage } from '@/pages/SubscriptionPlansPage'
 import { AuditLogsPage } from '@/pages/AuditLogsPage'
+import { SettingsPage } from '@/pages/SettingsPage'
 import { Toaster } from '@/components/ui/toaster'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -44,7 +46,9 @@ function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="subscriptions" element={<SubscriptionsPage />} />
+          <Route path="plans" element={<SubscriptionPlansPage />} />
           <Route path="audit-logs" element={<AuditLogsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
         
         {/* Fallback */}

@@ -10,6 +10,8 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=dev-jwt-secret-change-in-production
       - KOLOSAL_API_KEY=${KOLOSAL_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL_CHAT=${OPENROUTER_MODEL_CHAT:-openai/gpt-4o-mini}
       - LOG_LEVEL=debug
       - PORT=8080
       - CORS_ORIGIN=http://localhost:3000,http://localhost:3001

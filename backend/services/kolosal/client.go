@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	KolosalAPIBaseURL = "https://api.kolosal.ai/v1"
-	DefaultTimeout    = 30 * time.Second
+	KolosalAPIBaseURL = "https://api.kolosal.ai/v1/"
+	DefaultTimeout    = 120 * time.Second // Increased timeout for AI chat completions (can take 30+ seconds)
 )
 
 // Client represents a Kolosal.ai API client
@@ -73,7 +73,7 @@ type Usage struct {
 
 // CreateChatCompletion calls Kolosal.ai chat completions API
 func (c *Client) CreateChatCompletion(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, error) {
-	url := fmt.Sprintf("%s/chat/completions", c.BaseURL)
+	url := fmt.Sprintf("%schat/completions", c.BaseURL)
 
 	reqBody, err := json.Marshal(req)
 	if err != nil {
@@ -91,6 +91,12 @@ func (c *Client) CreateChatCompletion(ctx context.Context, req ChatCompletionReq
 	// Log request details for debugging
 	fmt.Printf("[Kolosal Chat] Request URL: %s\n", url)
 	fmt.Printf("[Kolosal Chat] Request Body Length: %d bytes\n", len(reqBody))
+	fmt.Printf("[Kolosal Chat] Request Body: %s\n", string(reqBody))
+	apiKeyPreview := c.APIKey
+	if len(apiKeyPreview) > 10 {
+		apiKeyPreview = apiKeyPreview[:10] + "..."
+	}
+	fmt.Printf("[Kolosal Chat] Authorization Header: Bearer %s\n", apiKeyPreview)
 
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
@@ -144,7 +150,7 @@ type OCRResponse struct {
 
 // OCR performs OCR on an image
 func (c *Client) OCR(ctx context.Context, req OCRRequest) (*OCRResponse, error) {
-	url := fmt.Sprintf("%s/ocr", c.BaseURL)
+	url := fmt.Sprintf("%socr", c.BaseURL)
 
 	reqBody, err := json.Marshal(req)
 	if err != nil {
@@ -192,7 +198,7 @@ type OCRFormResponse struct {
 
 // OCRForm performs OCR form extraction on an image
 func (c *Client) OCRForm(ctx context.Context, req OCRFormRequest) (*OCRFormResponse, error) {
-	url := fmt.Sprintf("%s/ocrform", c.BaseURL)
+	url := fmt.Sprintf("%socrform", c.BaseURL)
 
 	reqBody, err := json.Marshal(req)
 	if err != nil {

@@ -4,9 +4,9 @@ FROM golang:1.25-alpine
 WORKDIR /app
 
 # Install Air for hot reload and build dependencies
-# Using Air latest which supports Go 1.25
+# Using Air latest from new repository (migrated from cosmtrek/air to air-verse/air)
 RUN apk add --no-cache git make ca-certificates tzdata poppler-utils && \
-    go install github.com/cosmtrek/air@latest
+    go install github.com/air-verse/air@latest
 
 # Copy go mod files first for better caching
 COPY go.mod go.sum ./

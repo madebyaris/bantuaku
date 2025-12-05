@@ -11,6 +11,9 @@ interface RequestOptions {
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { token, logout } = useAuthStore.getState()
   
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/caa1e494-1c2c-46ae-ab69-48afbc48a0f9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:request:entry',message:'API request initiated',data:{endpoint,method:options.method||'GET',hasToken:!!token},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...options.headers,
@@ -26,13 +29,18 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     body: options.body ? JSON.stringify(options.body) : undefined,
   })
   
-  if (response.status === 401) {
+  // Only redirect on 401 if we have a token (authenticated request failed)
+  // Don't redirect for login endpoint (it's expected to return 401 on failure)
+  if (response.status === 401 && token && !endpoint.includes('/auth/login')) {
     logout()
     window.location.href = '/login'
     throw new Error('Unauthorized')
   }
   
   if (!response.ok) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/caa1e494-1c2c-46ae-ab69-48afbc48a0f9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:request:error',message:'API request failed',data:{status:response.status,statusText:response.statusText,endpoint},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     const error = await response.json().catch(() => ({ message: 'Request failed' }))
     throw new Error(error.message || error.error || 'Request failed')
   }
@@ -63,8 +71,11 @@ export const api = {
             email: string
             role: string
             status: string
+            company_id?: string
             store_name?: string
             industry?: string
+            subscription_plan?: string
+            subscription_status?: string
             created_at: string
             updated_at?: string
           }>
@@ -82,6 +93,8 @@ export const api = {
           status: string
           store_name?: string
           industry?: string
+          subscription_plan?: string
+          subscription_status?: string
           created_at: string
           updated_at?: string
         }>(`/admin/users/${id}`),
@@ -115,12 +128,28 @@ export const api = {
         }),
     },
     subscriptions: {
+      stats: () =>
+        request<{
+          total_subscriptions: number
+          active_subscriptions: number
+          trialing_count: number
+          canceled_count: number
+          past_due_count: number
+          mrr: number
+          plan_breakdown: Array<{
+            plan_id: string
+            plan_name: string
+            count: number
+            price_monthly: number
+          }>
+        }>('/admin/subscriptions/stats'),
       list: (page = 1, limit = 20) =>
         request<{
           subscriptions: Array<{
             id: string
             company_id: string
             company_name: string
+            owner_email: string
             plan_id: string
             plan_name: string
             status: string
@@ -159,6 +188,209 @@ export const api = {
         request<{ message: string }>(`/admin/subscriptions/${id}/status`, {
           method: 'PUT',
           body: { status },
+        }),
+      getTransactions: (id: string, page = 1, limit = 20) =>
+        request<{
+          transactions: Array<{
+            id: string
+            subscription_id: string
+            company_id: string
+            event_type: string
+            old_plan_id?: string
+            new_plan_id?: string
+            old_status?: string
+            new_status?: string
+            changed_by_user_id?: string
+            metadata?: Record<string, unknown>
+            created_at: string
+          }>
+          pagination: {
+            page: number
+            limit: number
+            total: number
+          }
+        }>(`/admin/subscriptions/${id}/transactions?page=${page}&limit=${limit}`),
+    },
+    chatUsage: {
+      get: (filters?: {
+        company_id?: string
+        start_date?: string
+        end_date?: string
+        page?: number
+        limit?: number
+      }) => {
+        const params = new URLSearchParams()
+        if (filters?.company_id) params.append('company_id', filters.company_id)
+        if (filters?.start_date) params.append('start_date', filters.start_date)
+        if (filters?.end_date) params.append('end_date', filters.end_date)
+        if (filters?.page) params.append('page', filters.page.toString())
+        if (filters?.limit) params.append('limit', filters.limit.toString())
+        return request<{
+          stats: {
+            total_messages: number
+            total_conversations: number
+            unique_users: number
+            period: string
+            start_date?: string
+            end_date?: string
+          }
+          daily_logs: Array<{
+            id: string
+            company_id: string
+            date: string
+            total_messages: number
+            total_conversations: number
+            unique_users: number
+            created_at: string
+            updated_at: string
+          }>
+          pagination: {
+            page: number
+            limit: number
+            total: number
+          }
+        }>(`/admin/chat-usage?${params.toString()}`)
+      },
+    },
+    tokenUsage: {
+      get: (filters?: {
+        company_id?: string
+        model?: string
+        start_date?: string
+        end_date?: string
+        page?: number
+        limit?: number
+      }) => {
+        const params = new URLSearchParams()
+        if (filters?.company_id) params.append('company_id', filters.company_id)
+        if (filters?.model) params.append('model', filters.model)
+        if (filters?.start_date) params.append('start_date', filters.start_date)
+        if (filters?.end_date) params.append('end_date', filters.end_date)
+        if (filters?.page) params.append('page', filters.page.toString())
+        if (filters?.limit) params.append('limit', filters.limit.toString())
+        return request<{
+          stats: {
+            total_prompt_tokens: number
+            total_completion_tokens: number
+            total_tokens: number
+            estimated_cost: number
+            model_breakdown: Array<{
+              model: string
+              provider: string
+              prompt_tokens: number
+              completion_tokens: number
+              total_tokens: number
+              estimated_cost: number
+              request_count: number
+            }>
+            start_date?: string
+            end_date?: string
+          }
+          usage: Array<{
+            id: string
+            company_id: string
+            conversation_id?: string
+            message_id?: string
+            model: string
+            provider: string
+            prompt_tokens: number
+            completion_tokens: number
+            total_tokens: number
+            created_at: string
+          }>
+          pagination: {
+            page: number
+            limit: number
+            total: number
+          }
+        }>(`/admin/token-usage?${params.toString()}`)
+      },
+    },
+    plans: {
+      list: (page = 1, limit = 20) =>
+        request<{
+          plans: Array<{
+            id: string
+            name: string
+            display_name: string
+            price_monthly: number
+            price_yearly?: number
+            currency: string
+            max_stores?: number
+            max_products?: number
+            max_chats_per_month?: number
+            max_file_uploads_per_month?: number
+            max_file_size_mb?: number
+            max_forecast_refreshes_per_month?: number
+            features: Record<string, boolean>
+            is_active: boolean
+            created_at: string
+            updated_at?: string
+          }>
+          pagination: {
+            page: number
+            limit: number
+            total: number
+          }
+        }>(`/admin/plans?page=${page}&limit=${limit}`),
+      get: (id: string) =>
+        request<{
+          id: string
+          name: string
+          display_name: string
+          price_monthly: number
+          price_yearly?: number
+          currency: string
+          max_stores?: number
+          max_products?: number
+          max_chats_per_month?: number
+          max_file_uploads_per_month?: number
+          max_file_size_mb?: number
+          max_forecast_refreshes_per_month?: number
+          features: Record<string, boolean>
+          is_active: boolean
+          created_at: string
+          updated_at?: string
+        }>(`/admin/plans/${id}`),
+      create: (data: {
+        name: string
+        display_name: string
+        price_monthly: number
+        price_yearly?: number
+        currency?: string
+        max_stores?: number
+        max_products?: number
+        max_chats_per_month?: number
+        max_file_uploads_per_month?: number
+        max_file_size_mb?: number
+        max_forecast_refreshes_per_month?: number
+        features?: Record<string, boolean>
+      }) =>
+        request<{ id: string; name: string }>('/admin/plans', {
+          method: 'POST',
+          body: data,
+        }),
+      update: (id: string, data: {
+        display_name: string
+        price_monthly: number
+        price_yearly?: number
+        currency?: string
+        max_stores?: number
+        max_products?: number
+        max_chats_per_month?: number
+        max_file_uploads_per_month?: number
+        max_file_size_mb?: number
+        max_forecast_refreshes_per_month?: number
+        features?: Record<string, boolean>
+        is_active?: boolean
+      }) =>
+        request<{ message: string }>(`/admin/plans/${id}`, {
+          method: 'PUT',
+          body: data,
+        }),
+      delete: (id: string) =>
+        request<{ message: string }>(`/admin/plans/${id}`, {
+          method: 'DELETE',
         }),
     },
     auditLogs: {
@@ -199,6 +431,15 @@ export const api = {
           active_subscriptions: number
           total_audit_logs: number
         }>('/admin/stats'),
+    },
+    settings: {
+      getAIProvider: () =>
+        request<{ provider: string }>('/admin/settings/ai-provider'),
+      updateAIProvider: (provider: 'openrouter' | 'kolosal') =>
+        request<{ provider: string; message: string }>('/admin/settings/ai-provider', {
+          method: 'PUT',
+          body: { provider },
+        }),
     },
   },
 }

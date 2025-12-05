@@ -3,7 +3,9 @@ package admin
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -18,30 +20,33 @@ import (
 )
 
 type AdminHandler struct {
-	db     *storage.Postgres
-	log    logger.Logger
-	jwtSecret string
+	db          *storage.Postgres
+	log         logger.Logger
+	jwtSecret   string
 	auditLogger *audit.Logger
 }
 
 func NewAdminHandler(db *storage.Postgres, jwtSecret string, auditLogger *audit.Logger) *AdminHandler {
 	return &AdminHandler{
-		db:     db,
-		log:    *logger.Default(),
-		jwtSecret: jwtSecret,
+		db:          db,
+		log:         *logger.Default(),
+		jwtSecret:   jwtSecret,
 		auditLogger: auditLogger,
 	}
 }
 
 // User represents a user in admin context
 type User struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	Role      string    `json:"role"`
-	Status    string    `json:"status"`
-	StoreName string    `json:"store_name"`
-	Industry  string    `json:"industry"`
-	CreatedAt time.Time `json:"created_at"`
+	ID                 string    `json:"id"`
+	Email              string    `json:"email"`
+	Role               string    `json:"role"`
+	Status             string    `json:"status"`
+	CompanyID          string    `json:"company_id,omitempty"` // From companies.id
+	StoreName          string    `json:"store_name"`
+	Industry           string    `json:"industry"`
+	SubscriptionPlan   string    `json:"subscription_plan"`             // From companies.subscription_plan
+	SubscriptionStatus string    `json:"subscription_status,omitempty"` // From subscriptions.status
+	CreatedAt          time.Time `json:"created_at"`
 }
 
 type AdminStats struct {
@@ -54,9 +59,21 @@ type AdminStats struct {
 func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// #region agent log
+	if f, err := os.OpenFile("/Volumes/app/hackathon/imphxkolosal/bantuaku/.cursor/debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+		fmt.Fprintf(f, `{"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"admin/users.go:GetStats:entry","message":"GetStats handler called","data":{"dbNil":%t},"timestamp":%d}`+"\n", h.db == nil, 0)
+		f.Close()
+	}
+	// #endregion
 	var stats AdminStats
 
 	if err := h.db.Pool().QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&stats.TotalUsers); err != nil {
+		// #region agent log
+		if f, err2 := os.OpenFile("/Volumes/app/hackathon/imphxkolosal/bantuaku/.cursor/debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err2 == nil {
+			fmt.Fprintf(f, `{"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"admin/users.go:GetStats:queryError","message":"Query users failed","data":{"error":"%s"},"timestamp":%d}`+"\n", err.Error(), 0)
+			f.Close()
+		}
+		// #endregion
 		appErr := errors.NewDatabaseError(err, "count users")
 		h.respondError(w, appErr, r)
 		return
@@ -102,9 +119,15 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 			u.id, 
 			u.email, 
 			COALESCE(u.role, 'user'), 
-			COALESCE(u.status, 'active'), 
+			COALESCE(u.status, 'active'),
+			COALESCE(c.id, '') as company_id,
 			COALESCE(c.name, '') as store_name,
 			COALESCE(c.industry, '') as industry,
+			COALESCE(c.subscription_plan, 'free') as subscription_plan,
+			COALESCE(
+				(SELECT status FROM subscriptions WHERE company_id = c.id AND status = 'active' ORDER BY created_at DESC LIMIT 1),
+				''
+			) as subscription_status,
 			u.created_at
 		FROM users u
 		LEFT JOIN companies c ON c.owner_user_id = u.id
@@ -121,9 +144,16 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	var users []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.Status, &u.StoreName, &u.Industry, &u.CreatedAt); err != nil {
+		var companyID, subscriptionStatus sql.NullString
+		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.Status, &companyID, &u.StoreName, &u.Industry, &u.SubscriptionPlan, &subscriptionStatus, &u.CreatedAt); err != nil {
 			h.log.Error("Failed to scan user", "error", err)
 			continue
+		}
+		if companyID.Valid {
+			u.CompanyID = companyID.String
+		}
+		if subscriptionStatus.Valid {
+			u.SubscriptionStatus = subscriptionStatus.String
 		}
 		users = append(users, u)
 	}
@@ -158,7 +188,8 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var u User
-	var storeName, industry sql.NullString
+	var storeName, industry, subscriptionPlan sql.NullString
+	var subscriptionStatus sql.NullString
 	err := h.db.Pool().QueryRow(ctx, `
 		SELECT 
 			u.id, 
@@ -167,13 +198,18 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 			COALESCE(u.status, 'active'),
 			c.name as store_name,
 			c.industry as industry,
+			COALESCE(c.subscription_plan, 'free') as subscription_plan,
+			COALESCE(
+				(SELECT status FROM subscriptions WHERE company_id = c.id AND status = 'active' ORDER BY created_at DESC LIMIT 1),
+				''
+			) as subscription_status,
 			u.created_at
 		FROM users u
 		LEFT JOIN companies c ON c.owner_user_id = u.id
 		WHERE u.id = $1
 		ORDER BY COALESCE(c.created_at, '1970-01-01'::timestamp) DESC NULLS LAST
 		LIMIT 1
-	`, userID).Scan(&u.ID, &u.Email, &u.Role, &u.Status, &storeName, &industry, &u.CreatedAt)
+	`, userID).Scan(&u.ID, &u.Email, &u.Role, &u.Status, &storeName, &industry, &subscriptionPlan, &subscriptionStatus, &u.CreatedAt)
 	if err != nil {
 		appErr := errors.NewNotFoundError("User not found")
 		h.respondError(w, appErr, r)
@@ -181,27 +217,38 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	}
 	u.StoreName = storeName.String
 	u.Industry = industry.String
-	
+	if subscriptionPlan.Valid {
+		u.SubscriptionPlan = subscriptionPlan.String
+	} else {
+		u.SubscriptionPlan = "free"
+	}
+	if subscriptionStatus.Valid && subscriptionStatus.String != "" {
+		u.SubscriptionStatus = subscriptionStatus.String
+	}
+
 	// Log for debugging - check if company exists
 	if !storeName.Valid {
 		h.log.Warn("GetUser: No company found for user", "user_id", userID, "email", u.Email)
 		// Try to find any company (even inactive) as fallback
-		var fallbackStoreName, fallbackIndustry sql.NullString
+		var fallbackStoreName, fallbackIndustry, fallbackPlan sql.NullString
 		fallbackErr := h.db.Pool().QueryRow(ctx, `
-			SELECT name, industry 
+			SELECT name, industry, COALESCE(subscription_plan, 'free')
 			FROM companies 
 			WHERE owner_user_id = $1 
 			ORDER BY created_at DESC 
 			LIMIT 1
-		`, userID).Scan(&fallbackStoreName, &fallbackIndustry)
+		`, userID).Scan(&fallbackStoreName, &fallbackIndustry, &fallbackPlan)
 		if fallbackErr == nil && fallbackStoreName.Valid {
 			h.log.Info("GetUser: Found fallback company", "user_id", userID, "store_name", fallbackStoreName.String)
 			u.StoreName = fallbackStoreName.String
 			u.Industry = fallbackIndustry.String
+			if fallbackPlan.Valid {
+				u.SubscriptionPlan = fallbackPlan.String
+			}
 		}
 	}
-	
-	h.log.Info("GetUser result", "user_id", userID, "store_name", u.StoreName, "industry", u.Industry)
+
+	h.log.Info("GetUser result", "user_id", userID, "store_name", u.StoreName, "industry", u.Industry, "subscription_plan", u.SubscriptionPlan)
 
 	h.respondJSON(w, http.StatusOK, u)
 }
@@ -263,11 +310,11 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 
 // CreateUser creates a new user (admin only)
 type CreateUserRequest struct {
-	Email      string `json:"email" validate:"required,email"`
-	Password   string `json:"password" validate:"required,min:6"`
-	Role       string `json:"role" validate:"required,oneof=user admin super_admin"`
-	StoreName  string `json:"store_name" validate:"required"`
-	Industry   string `json:"industry,omitempty"`
+	Email     string `json:"email" validate:"required,email"`
+	Password  string `json:"password" validate:"required,min:6"`
+	Role      string `json:"role" validate:"required,oneof=user admin super_admin"`
+	StoreName string `json:"store_name" validate:"required"`
+	Industry  string `json:"industry,omitempty"`
 }
 
 func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
@@ -577,7 +624,7 @@ func (h *AdminHandler) UpgradeUserSubscription(w http.ResponseWriter, r *http.Re
 	// Create or update subscription record
 	now := time.Now()
 	periodEnd := now.AddDate(0, 1, 0) // 1 month from now
-	
+
 	// Check if subscription already exists
 	var existingSubID string
 	checkErr := h.db.Pool().QueryRow(ctx, `SELECT id FROM subscriptions WHERE company_id = $1`, companyID).Scan(&existingSubID)
@@ -610,9 +657,9 @@ func (h *AdminHandler) UpgradeUserSubscription(w http.ResponseWriter, r *http.Re
 	// Log audit event
 	if h.auditLogger != nil {
 		h.auditLogger.LogResourceAction(ctx, r, "subscription.manually_upgraded", "subscription", companyID, map[string]interface{}{
-			"user_id": userID,
+			"user_id":    userID,
 			"company_id": companyID,
-			"plan": "pro",
+			"plan":       "pro",
 		})
 	}
 
@@ -629,5 +676,3 @@ func (h *AdminHandler) respondJSON(w http.ResponseWriter, status int, data inter
 func (h *AdminHandler) respondError(w http.ResponseWriter, err *errors.AppError, r *http.Request) {
 	errors.WriteJSONError(w, err, err.Code)
 }
-
-

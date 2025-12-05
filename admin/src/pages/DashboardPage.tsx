@@ -23,7 +23,13 @@ export function DashboardPage() {
   useEffect(() => {
     async function loadStats() {
       try {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/caa1e494-1c2c-46ae-ab69-48afbc48a0f9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DashboardPage.tsx:loadStats:entry',message:'loadStats called',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         const statsRes = await api.admin.stats.get()
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/caa1e494-1c2c-46ae-ab69-48afbc48a0f9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DashboardPage.tsx:loadStats:success',message:'stats.get success',data:{totalUsers:statsRes.total_users},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         setStats({
           totalUsers: statsRes.total_users,
           totalSubscriptions: statsRes.total_subscriptions,
@@ -31,6 +37,9 @@ export function DashboardPage() {
           totalAuditLogs: statsRes.total_audit_logs,
         })
       } catch (error) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/caa1e494-1c2c-46ae-ab69-48afbc48a0f9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DashboardPage.tsx:loadStats:error',message:'stats.get failed',data:{error:error instanceof Error?error.message:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         console.error('Failed to load stats:', error)
       } finally {
         setLoading(false)
