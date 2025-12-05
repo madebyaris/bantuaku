@@ -7,6 +7,7 @@ export interface ChatMessage {
   text: string
   confidence?: number
   dataSources?: string[]
+  citations?: Array<{ text: string; source: string }>
   timestamp: Date
 }
 

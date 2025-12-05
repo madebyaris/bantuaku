@@ -31,9 +31,9 @@ type WooCommerceSyncStatusResponse struct {
 
 // WooCommerceConnect connects a WooCommerce store
 func (h *Handler) WooCommerceConnect(w http.ResponseWriter, r *http.Request) {
-	storeID := middleware.GetStoreID(r.Context())
-	if storeID == "" {
-		respondError(w, http.StatusUnauthorized, "Store not found in context")
+	companyID := middleware.GetCompanyID(r.Context())
+	if companyID == "" {
+		respondError(w, http.StatusUnauthorized, "Company not found in context")
 		return
 	}
 
@@ -79,8 +79,8 @@ func (h *Handler) WooCommerceConnect(w http.ResponseWriter, r *http.Request) {
 	// Check if integration exists
 	var existingID string
 	err = h.db.Pool().QueryRow(r.Context(), `
-		SELECT id FROM integrations WHERE store_id = $1 AND platform = 'woocommerce'
-	`, storeID).Scan(&existingID)
+		SELECT id FROM integrations WHERE company_id = $1 AND platform = 'woocommerce'
+	`, companyID).Scan(&existingID)
 
 	if err == nil {
 		// Update existing
@@ -92,9 +92,9 @@ func (h *Handler) WooCommerceConnect(w http.ResponseWriter, r *http.Request) {
 		// Create new
 		integrationID := uuid.New().String()
 		_, err = h.db.Pool().Exec(r.Context(), `
-			INSERT INTO integrations (id, store_id, platform, status, metadata, created_at)
+			INSERT INTO integrations (id, company_id, platform, status, metadata, created_at)
 			VALUES ($1, $2, 'woocommerce', 'connected', $3, $4)
-		`, integrationID, storeID, string(metadataJSON), time.Now())
+		`, integrationID, companyID, string(metadataJSON), time.Now())
 	}
 
 	if err != nil {
@@ -110,18 +110,18 @@ func (h *Handler) WooCommerceConnect(w http.ResponseWriter, r *http.Request) {
 
 // WooCommerceSyncStatus returns the sync status
 func (h *Handler) WooCommerceSyncStatus(w http.ResponseWriter, r *http.Request) {
-	storeID := middleware.GetStoreID(r.Context())
-	if storeID == "" {
-		respondError(w, http.StatusUnauthorized, "Store not found in context")
+	companyID := middleware.GetCompanyID(r.Context())
+	if companyID == "" {
+		respondError(w, http.StatusUnauthorized, "Company not found in context")
 		return
 	}
 
 	var integration models.Integration
 	err := h.db.Pool().QueryRow(r.Context(), `
-		SELECT id, store_id, platform, status, last_sync, error_message, metadata
+		SELECT id, company_id, platform, status, last_sync, error_message, metadata
 		FROM integrations
-		WHERE store_id = $1 AND platform = 'woocommerce'
-	`, storeID).Scan(&integration.ID, &integration.StoreID, &integration.Platform, &integration.Status, &integration.LastSync, &integration.ErrorMessage, &integration.Metadata)
+		WHERE company_id = $1 AND platform = 'woocommerce'
+	`, companyID).Scan(&integration.ID, &integration.CompanyID, &integration.Platform, &integration.Status, &integration.LastSync, &integration.ErrorMessage, &integration.Metadata)
 
 	if err != nil {
 		respondJSON(w, http.StatusOK, WooCommerceSyncStatusResponse{
@@ -133,12 +133,12 @@ func (h *Handler) WooCommerceSyncStatus(w http.ResponseWriter, r *http.Request) 
 	// Count synced products and orders
 	var productCount, orderCount int
 	h.db.Pool().QueryRow(r.Context(), `
-		SELECT COUNT(*) FROM products WHERE store_id = $1
-	`, storeID).Scan(&productCount)
+		SELECT COUNT(*) FROM products WHERE company_id = $1
+	`, companyID).Scan(&productCount)
 
 	h.db.Pool().QueryRow(r.Context(), `
-		SELECT COUNT(*) FROM sales_history WHERE store_id = $1 AND source = 'woocommerce'
-	`, storeID).Scan(&orderCount)
+		SELECT COUNT(*) FROM sales_history WHERE company_id = $1 AND source = 'woocommerce'
+	`, companyID).Scan(&orderCount)
 
 	respondJSON(w, http.StatusOK, WooCommerceSyncStatusResponse{
 		Status:       integration.Status,
@@ -151,9 +151,9 @@ func (h *Handler) WooCommerceSyncStatus(w http.ResponseWriter, r *http.Request) 
 
 // WooCommerceSyncNow triggers a manual sync
 func (h *Handler) WooCommerceSyncNow(w http.ResponseWriter, r *http.Request) {
-	storeID := middleware.GetStoreID(r.Context())
-	if storeID == "" {
-		respondError(w, http.StatusUnauthorized, "Store not found in context")
+	companyID := middleware.GetCompanyID(r.Context())
+	if companyID == "" {
+		respondError(w, http.StatusUnauthorized, "Company not found in context")
 		return
 	}
 
@@ -161,8 +161,8 @@ func (h *Handler) WooCommerceSyncNow(w http.ResponseWriter, r *http.Request) {
 	var metadataJSON string
 	err := h.db.Pool().QueryRow(r.Context(), `
 		SELECT metadata FROM integrations 
-		WHERE store_id = $1 AND platform = 'woocommerce' AND status = 'connected'
-	`, storeID).Scan(&metadataJSON)
+		WHERE company_id = $1 AND platform = 'woocommerce' AND status = 'connected'
+	`, companyID).Scan(&metadataJSON)
 
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "WooCommerce not connected")
@@ -186,7 +186,7 @@ func (h *Handler) WooCommerceSyncNow(w http.ResponseWriter, r *http.Request) {
 
 	productResp, err := client.Do(productReq)
 	if err != nil {
-		h.updateIntegrationError(r.Context(), storeID, "Failed to fetch products: "+err.Error())
+		h.updateIntegrationError(r.Context(), companyID, "Failed to fetch products: "+err.Error())
 		respondError(w, http.StatusInternalServerError, "Failed to fetch products from WooCommerce")
 		return
 	}
@@ -209,13 +209,13 @@ func (h *Handler) WooCommerceSyncNow(w http.ResponseWriter, r *http.Request) {
 
 		// Upsert product
 		_, err := h.db.Pool().Exec(r.Context(), `
-			INSERT INTO products (id, store_id, product_name, sku, unit_price, created_at, updated_at)
+			INSERT INTO products (id, company_id, name, sku, unit_price, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			ON CONFLICT (store_id, sku) DO UPDATE SET
-				product_name = EXCLUDED.product_name,
+			ON CONFLICT (company_id, sku) DO UPDATE SET
+				name = EXCLUDED.name,
 				unit_price = EXCLUDED.unit_price,
 				updated_at = EXCLUDED.updated_at
-		`, uuid.New().String(), storeID, wp.Name, wp.SKU, price, time.Now(), time.Now())
+		`, uuid.New().String(), companyID, wp.Name, wp.SKU, price, time.Now(), time.Now())
 
 		if err == nil {
 			syncedProducts++
@@ -229,7 +229,7 @@ func (h *Handler) WooCommerceSyncNow(w http.ResponseWriter, r *http.Request) {
 
 	orderResp, err := client.Do(orderReq)
 	if err != nil {
-		h.updateIntegrationError(r.Context(), storeID, "Failed to fetch orders: "+err.Error())
+		h.updateIntegrationError(r.Context(), companyID, "Failed to fetch orders: "+err.Error())
 		respondError(w, http.StatusInternalServerError, "Failed to fetch orders from WooCommerce")
 		return
 	}
@@ -256,17 +256,17 @@ func (h *Handler) WooCommerceSyncNow(w http.ResponseWriter, r *http.Request) {
 			// Get product ID by WooCommerce product ID (stored in SKU or a mapping)
 			var productID string
 			h.db.Pool().QueryRow(r.Context(), `
-				SELECT id FROM products WHERE store_id = $1 LIMIT 1
-			`, storeID).Scan(&productID)
+				SELECT id FROM products WHERE company_id = $1 LIMIT 1
+			`, companyID).Scan(&productID)
 
 			if productID == "" {
 				continue
 			}
 
 			_, err := h.db.Pool().Exec(r.Context(), `
-				INSERT INTO sales_history (store_id, product_id, quantity, price, sale_date, source, created_at)
+				INSERT INTO sales_history (company_id, product_id, quantity, price, sale_date, source, created_at)
 				VALUES ($1, $2, $3, $4, $5, 'woocommerce', $6)
-			`, storeID, productID, item.Quantity, item.Price, orderDate, time.Now())
+			`, companyID, productID, item.Quantity, item.Price, orderDate, time.Now())
 
 			if err == nil {
 				syncedOrders++
@@ -278,8 +278,8 @@ func (h *Handler) WooCommerceSyncNow(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	h.db.Pool().Exec(r.Context(), `
 		UPDATE integrations SET last_sync = $1, error_message = ''
-		WHERE store_id = $2 AND platform = 'woocommerce'
-	`, now, storeID)
+		WHERE company_id = $2 AND platform = 'woocommerce'
+	`, now, companyID)
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"status":          "success",
@@ -289,7 +289,7 @@ func (h *Handler) WooCommerceSyncNow(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) updateIntegrationError(ctx interface{}, storeID, errorMsg string) {
+func (h *Handler) updateIntegrationError(ctx interface{}, companyID, errorMsg string) {
 	// Type assertion for context
 	if c, ok := ctx.(interface{ Done() <-chan struct{} }); ok {
 		h.db.Pool().Exec(c.(interface {
@@ -299,7 +299,7 @@ func (h *Handler) updateIntegrationError(ctx interface{}, storeID, errorMsg stri
 			Deadline() (time.Time, bool)
 		}), `
 			UPDATE integrations SET status = 'error', error_message = $1
-			WHERE store_id = $2 AND platform = 'woocommerce'
-		`, errorMsg, storeID)
+			WHERE company_id = $2 AND platform = 'woocommerce'
+		`, errorMsg, companyID)
 	}
 }

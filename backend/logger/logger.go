@@ -121,10 +121,13 @@ func (l *Logger) RequestID(ctx context.Context) *Logger {
 	return l
 }
 
-// StoreID extracts store ID from context and adds it to the log
-func (l *Logger) StoreID(ctx context.Context) *Logger {
+// CompanyID extracts company/store ID from context and adds it to the log
+func (l *Logger) CompanyID(ctx context.Context) *Logger {
+	if companyID := ctx.Value("company_id"); companyID != nil {
+		return l.With("company_id", companyID)
+	}
 	if storeID := ctx.Value("store_id"); storeID != nil {
-		return l.With("store_id", storeID)
+		return l.With("company_id", storeID)
 	}
 	return l
 }
@@ -139,7 +142,7 @@ func (l *Logger) UserID(ctx context.Context) *Logger {
 
 // LogRequest logs an HTTP request
 func (l *Logger) LogRequest(method, path string, statusCode int, duration int64, ctx context.Context) {
-	l.RequestID(ctx).StoreID(ctx).UserID(ctx).Info(
+	l.RequestID(ctx).CompanyID(ctx).UserID(ctx).Info(
 		"HTTP request",
 		"method", method,
 		"path", path,
@@ -150,7 +153,7 @@ func (l *Logger) LogRequest(method, path string, statusCode int, duration int64,
 
 // LogError logs an error with context
 func (l *Logger) LogError(err error, msg string, ctx context.Context) {
-	l.RequestID(ctx).StoreID(ctx).UserID(ctx).Error(
+	l.RequestID(ctx).CompanyID(ctx).UserID(ctx).Error(
 		msg,
 		"error", err.Error(),
 		"error_type", fmt.Sprintf("%T", err),

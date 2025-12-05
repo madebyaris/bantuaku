@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Save, Settings } from "lucide-react";
+import { Save, Settings, ShieldAlert, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -87,14 +87,52 @@ export function SettingsPage() {
         <p className="text-slate-400">Konfigurasi pengaturan aplikasi</p>
       </div>
 
+      {/* Security Notice */}
+      <Card className="p-4 border-amber-500/30 bg-amber-500/5 hover-card-effect">
+        <div className="flex gap-3">
+          <ShieldAlert className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-semibold text-amber-400 mb-1">Pengaturan Keamanan</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              API keys dan konfigurasi sensitif lainnya harus diubah melalui <code className="px-1.5 py-0.5 rounded bg-black/30 text-amber-300 font-mono text-[10px]">.env</code> file atau environment variables di server untuk alasan keamanan. 
+              Pengaturan berikut yang perlu dikonfigurasi di level environment:
+            </p>
+            <ul className="mt-2 text-xs text-slate-500 space-y-1">
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50"></span>
+                <code className="text-slate-400 font-mono">OPENROUTER_API_KEY</code> - API key untuk OpenRouter
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50"></span>
+                <code className="text-slate-400 font-mono">KOLOSAL_API_KEY</code> - API key untuk Kolosal
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50"></span>
+                <code className="text-slate-400 font-mono">JWT_SECRET</code> - Secret key untuk authentication
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50"></span>
+                <code className="text-slate-400 font-mono">DATABASE_URL</code> - Database connection string
+              </li>
+            </ul>
+          </div>
+        </div>
+      </Card>
+
       <Card className="p-6 hover-card-effect">
         <div className="flex items-center gap-2 mb-4">
           <Settings className="h-5 w-5 text-emerald-400" />
           <h2 className="text-xl font-display font-semibold text-slate-100">AI Provider</h2>
         </div>
-        <p className="text-sm text-slate-400 mb-6">
+        <p className="text-sm text-slate-400 mb-4">
           Pilih provider AI yang akan digunakan untuk fitur chat. Perubahan akan diterapkan untuk semua percakapan baru.
         </p>
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 mb-6">
+          <Info className="h-4 w-4 text-blue-400 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-blue-300">
+            Pengaturan ini hanya memilih provider yang aktif. Pastikan API key untuk provider yang dipilih sudah dikonfigurasi di environment variables.
+          </p>
+        </div>
 
         {loading ? (
           <div className="text-slate-400">Memuat pengaturan...</div>

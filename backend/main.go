@@ -90,6 +90,11 @@ func main() {
 	mux.HandleFunc("PUT /api/v1/products/{id}", middleware.Auth(cfg.JWTSecret, h.UpdateProduct))
 	mux.HandleFunc("DELETE /api/v1/products/{id}", middleware.Auth(cfg.JWTSecret, h.DeleteProduct))
 
+	// Company management
+	mux.HandleFunc("GET /api/v1/companies/me/profile", middleware.Auth(cfg.JWTSecret, h.GetCompanyProfile))
+	mux.HandleFunc("PATCH /api/v1/companies/me", middleware.Auth(cfg.JWTSecret, h.UpdateCompany))
+	mux.HandleFunc("PATCH /api/v1/companies/me/social-media", middleware.Auth(cfg.JWTSecret, h.UpdateCompanySocialMedia))
+
 	// Sales data input
 	mux.HandleFunc("POST /api/v1/sales/manual", middleware.Auth(cfg.JWTSecret, h.RecordSale))
 	mux.HandleFunc("POST /api/v1/sales/import-csv", middleware.Auth(cfg.JWTSecret, h.ImportCSV))
@@ -123,6 +128,9 @@ func main() {
 	mux.HandleFunc("GET /api/v1/chat/conversations", middleware.Auth(cfg.JWTSecret, h.GetConversations))
 	mux.HandleFunc("GET /api/v1/chat/messages", middleware.Auth(cfg.JWTSecret, h.GetMessages))
 	mux.HandleFunc("POST /api/v1/chat/feedback", middleware.Auth(cfg.JWTSecret, h.SubmitFeedback))
+	mux.HandleFunc("GET /api/v1/notifications", middleware.Auth(cfg.JWTSecret, h.ListNotifications))
+	mux.HandleFunc("PUT /api/v1/notifications/{id}/read", middleware.Auth(cfg.JWTSecret, h.MarkNotificationRead))
+	mux.HandleFunc("DELETE /api/v1/notifications/{id}", middleware.Auth(cfg.JWTSecret, h.DeleteNotification))
 
 	// File Uploads (NEW)
 	mux.HandleFunc("POST /api/v1/files/upload", middleware.Auth(cfg.JWTSecret, h.UploadFile))

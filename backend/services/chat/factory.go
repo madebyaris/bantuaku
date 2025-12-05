@@ -75,6 +75,8 @@ func (a *KolosalAdapter) CreateChatCompletion(ctx context.Context, req ChatCompl
 	kolosalReq := kolosal.ChatCompletionRequest{
 		Model:       req.Model,
 		Messages:    convertMessagesToKolosal(req.Messages),
+		Tools:       convertToolsToKolosal(req.Tools),
+		ToolChoice:  req.ToolChoice,
 		MaxTokens:   req.MaxTokens,
 		Temperature: req.Temperature,
 	}
@@ -94,6 +96,8 @@ func (a *OpenRouterAdapter) CreateChatCompletion(ctx context.Context, req ChatCo
 	openrouterReq := openrouter.ChatCompletionRequest{
 		Model:       req.Model,
 		Messages:    convertMessagesToOpenRouter(req.Messages),
+		Tools:       convertToolsToOpenRouter(req.Tools),
+		ToolChoice:  req.ToolChoice,
 		MaxTokens:   req.MaxTokens,
 		Temperature: req.Temperature,
 	}
@@ -110,8 +114,10 @@ func convertMessagesToKolosal(msgs []ChatCompletionMessage) []kolosal.ChatComple
 	result := make([]kolosal.ChatCompletionMessage, len(msgs))
 	for i, msg := range msgs {
 		result[i] = kolosal.ChatCompletionMessage{
-			Role:    msg.Role,
-			Content: msg.Content,
+			Role:       msg.Role,
+			Content:    msg.Content,
+			ToolCalls:  convertToolCallsToKolosal(msg.ToolCalls),
+			ToolCallID: msg.ToolCallID,
 		}
 	}
 	return result
@@ -121,8 +127,68 @@ func convertMessagesToOpenRouter(msgs []ChatCompletionMessage) []openrouter.Chat
 	result := make([]openrouter.ChatCompletionMessage, len(msgs))
 	for i, msg := range msgs {
 		result[i] = openrouter.ChatCompletionMessage{
-			Role:    msg.Role,
-			Content: msg.Content,
+			Role:       msg.Role,
+			Content:    msg.Content,
+			ToolCalls:  convertToolCallsToOpenRouter(msg.ToolCalls),
+			ToolCallID: msg.ToolCallID,
+		}
+	}
+	return result
+}
+
+func convertToolCallsToKolosal(toolCalls []ToolCall) []kolosal.ToolCall {
+	if toolCalls == nil {
+		return nil
+	}
+	result := make([]kolosal.ToolCall, len(toolCalls))
+	for i, tc := range toolCalls {
+		result[i] = kolosal.ToolCall{
+			ID:       tc.ID,
+			Type:     tc.Type,
+			Function: kolosal.FuncCall{Name: tc.Function.Name, Arguments: tc.Function.Arguments},
+		}
+	}
+	return result
+}
+
+func convertToolCallsToOpenRouter(toolCalls []ToolCall) []openrouter.ToolCall {
+	if toolCalls == nil {
+		return nil
+	}
+	result := make([]openrouter.ToolCall, len(toolCalls))
+	for i, tc := range toolCalls {
+		result[i] = openrouter.ToolCall{
+			ID:       tc.ID,
+			Type:     tc.Type,
+			Function: openrouter.FuncCall{Name: tc.Function.Name, Arguments: tc.Function.Arguments},
+		}
+	}
+	return result
+}
+
+func convertToolsToKolosal(tools []Tool) []kolosal.Tool {
+	if tools == nil {
+		return nil
+	}
+	result := make([]kolosal.Tool, len(tools))
+	for i, tool := range tools {
+		result[i] = kolosal.Tool{
+			Type:     tool.Type,
+			Function: kolosal.Function{Name: tool.Function.Name, Description: tool.Function.Description, Parameters: tool.Function.Parameters},
+		}
+	}
+	return result
+}
+
+func convertToolsToOpenRouter(tools []Tool) []openrouter.Tool {
+	if tools == nil {
+		return nil
+	}
+	result := make([]openrouter.Tool, len(tools))
+	for i, tool := range tools {
+		result[i] = openrouter.Tool{
+			Type:     tool.Type,
+			Function: openrouter.Function{Name: tool.Function.Name, Description: tool.Function.Description, Parameters: tool.Function.Parameters},
 		}
 	}
 	return result
@@ -133,7 +199,7 @@ func convertKolosalResponse(resp *kolosal.ChatCompletionResponse) *ChatCompletio
 	for i, choice := range resp.Choices {
 		choices[i] = ChatChoice{
 			Index:        choice.Index,
-			Message:      ChatCompletionMessage{Role: choice.Message.Role, Content: choice.Message.Content},
+			Message:      ChatCompletionMessage{Role: choice.Message.Role, Content: choice.Message.Content, ToolCalls: convertToolCallsFromKolosal(choice.Message.ToolCalls), ToolCallID: choice.Message.ToolCallID},
 			FinishReason: choice.FinishReason,
 		}
 	}
@@ -155,12 +221,42 @@ func convertKolosalResponse(resp *kolosal.ChatCompletionResponse) *ChatCompletio
 	}
 }
 
+func convertToolCallsFromOpenRouter(toolCalls []openrouter.ToolCall) []ToolCall {
+	if toolCalls == nil {
+		return nil
+	}
+	result := make([]ToolCall, len(toolCalls))
+	for i, tc := range toolCalls {
+		result[i] = ToolCall{
+			ID:       tc.ID,
+			Type:     tc.Type,
+			Function: FuncCall{Name: tc.Function.Name, Arguments: tc.Function.Arguments},
+		}
+	}
+	return result
+}
+
+func convertToolCallsFromKolosal(toolCalls []kolosal.ToolCall) []ToolCall {
+	if toolCalls == nil {
+		return nil
+	}
+	result := make([]ToolCall, len(toolCalls))
+	for i, tc := range toolCalls {
+		result[i] = ToolCall{
+			ID:       tc.ID,
+			Type:     tc.Type,
+			Function: FuncCall{Name: tc.Function.Name, Arguments: tc.Function.Arguments},
+		}
+	}
+	return result
+}
+
 func convertOpenRouterResponse(resp *openrouter.ChatCompletionResponse) *ChatCompletionResponse {
 	choices := make([]ChatChoice, len(resp.Choices))
 	for i, choice := range resp.Choices {
 		choices[i] = ChatChoice{
 			Index:        choice.Index,
-			Message:      ChatCompletionMessage{Role: choice.Message.Role, Content: choice.Message.Content},
+			Message:      ChatCompletionMessage{Role: choice.Message.Role, Content: choice.Message.Content, ToolCalls: convertToolCallsFromOpenRouter(choice.Message.ToolCalls), ToolCallID: choice.Message.ToolCallID},
 			FinishReason: choice.FinishReason,
 		}
 	}

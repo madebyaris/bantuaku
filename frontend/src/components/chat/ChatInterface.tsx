@@ -94,6 +94,7 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         text: response.assistant_reply,
+        citations: response.citations,
         timestamp: new Date(),
       }
 
@@ -201,6 +202,18 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
                     <span>
                       Confidence: {(message.confidence * 100).toFixed(0)}%
                     </span>
+                  </div>
+                )}
+                {message.citations && message.citations.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-white/10 space-y-2">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">Sumber</p>
+                    <ul className="space-y-1">
+                      {message.citations.map((c, idx) => (
+                        <li key={idx} className="text-xs text-slate-300">
+                          • {c.text} <span className="text-slate-500">({c.source})</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
               </div>

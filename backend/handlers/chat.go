@@ -15,6 +15,7 @@ import (
 	"github.com/bantuaku/backend/services/embedding"
 	"github.com/bantuaku/backend/services/settings"
 	"github.com/bantuaku/backend/services/tokenusage"
+	"github.com/bantuaku/backend/services/tools"
 	"github.com/bantuaku/backend/services/usage"
 	"github.com/bantuaku/backend/validation"
 
@@ -227,8 +228,8 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 			systemPrompt, userPrompt = ragService.BuildRAGPrompt(req.Message, ragContext)
 			log.Info("Using RAG-enhanced prompt", "rag_context_length", len(ragContext))
 		} else {
-			// Fallback to basic prompt
-			systemPrompt = "Kamu adalah Asisten Bantuaku, AI assistant untuk membantu UMKM Indonesia. Jawab dalam Bahasa Indonesia yang natural dan ramah."
+			// Fallback to basic prompt with tool instructions
+			systemPrompt = buildSystemPromptWithTools()
 			userPrompt = req.Message
 			log.Debug("Using basic prompt (no RAG)")
 		}
@@ -257,64 +258,255 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// Get tool definitions
+		modelTools := tools.GetToolDefinitions()
+		log.Info("Retrieved tool definitions",
+			"model_tools_count", len(modelTools),
+			"conversation_id", req.ConversationID)
+
+		// Convert models.Tool to chat.Tool
+		chatTools := make([]chat.Tool, len(modelTools))
+		for i, mt := range modelTools {
+			chatTools[i] = chat.Tool{
+				Type: mt.Type,
+				Function: chat.Function{
+					Name:        mt.Function.Name,
+					Description: mt.Function.Description,
+					Parameters:  mt.Function.Parameters,
+				},
+			}
+		}
+		log.Info("Converted tools to chat format",
+			"chat_tools_count", len(chatTools),
+			"conversation_id", req.ConversationID)
+
+		// Build conversation messages (load history if needed)
+		messages := []chat.ChatCompletionMessage{
+			{Role: "system", Content: systemPrompt},
+		}
+
+		// Load conversation history (last 20 messages to keep context manageable)
+		historyRows, err := h.db.Pool().Query(ctx, `
+			SELECT sender, content, structured_payload, created_at
+			FROM messages
+			WHERE conversation_id = $1
+			ORDER BY created_at ASC
+			LIMIT 20
+		`, req.ConversationID)
+		if err == nil {
+			defer historyRows.Close()
+			for historyRows.Next() {
+				var sender, content string
+				var structuredPayloadJSON []byte
+				var createdAt time.Time
+				if err := historyRows.Scan(&sender, &content, &structuredPayloadJSON, &createdAt); err == nil {
+					// Skip the current user message (we'll add it at the end)
+					// Convert sender to role format
+					role := sender
+					if sender == "assistant" {
+						role = "assistant"
+					} else if sender == "user" {
+						role = "user"
+					} else {
+						role = "user" // Default
+					}
+
+					// Parse structured_payload for tool calls if present
+					var toolCalls []chat.ToolCall
+					if len(structuredPayloadJSON) > 0 {
+						var payload map[string]interface{}
+						if json.Unmarshal(structuredPayloadJSON, &payload) == nil {
+							if toolCallsRaw, ok := payload["tool_calls"].([]interface{}); ok {
+								toolCalls = make([]chat.ToolCall, 0, len(toolCallsRaw))
+								for _, tc := range toolCallsRaw {
+									if tcMap, ok := tc.(map[string]interface{}); ok {
+										if funcMap, ok := tcMap["function"].(map[string]interface{}); ok {
+											toolCalls = append(toolCalls, chat.ToolCall{
+												ID:   getString(tcMap, "id"),
+												Type: getString(tcMap, "type"),
+												Function: chat.FuncCall{
+													Name:      getString(funcMap, "name"),
+													Arguments: getString(funcMap, "arguments"),
+												},
+											})
+										}
+									}
+								}
+							}
+						}
+					}
+
+					msg := chat.ChatCompletionMessage{
+						Role:      role,
+						Content:   content,
+						ToolCalls: toolCalls,
+					}
+					messages = append(messages, msg)
+				}
+			}
+			log.Info("Loaded conversation history",
+				"conversation_id", req.ConversationID,
+				"history_messages", len(messages)-1) // -1 for system message
+		} else {
+			log.Warn("Failed to load conversation history", "error", err)
+		}
+
+		// Add current user message
+		messages = append(messages, chat.ChatCompletionMessage{
+			Role:    "user",
+			Content: userPrompt,
+		})
+
+		// Debug: Log tool names
+		if len(chatTools) > 0 {
+			toolNames := make([]string, len(chatTools))
+			for i, t := range chatTools {
+				toolNames[i] = t.Function.Name
+			}
+			log.Info("Tools being sent to AI",
+				"tool_names", toolNames,
+				"tools_count", len(chatTools),
+				"conversation_id", req.ConversationID)
+		} else {
+			log.Warn("No tools configured - tools array is empty",
+				"conversation_id", req.ConversationID)
+		}
+
 		log.Info("Calling chat completion",
 			"model", model,
 			"message_length", len(req.Message),
 			"conversation_id", req.ConversationID,
-			"user_message", req.Message)
+			"user_message", req.Message,
+			"tools_count", len(chatTools),
+			"total_messages", len(messages))
 
-		resp, err = chatProvider.CreateChatCompletion(ctx, chat.ChatCompletionRequest{
-			Model: model,
-			Messages: []chat.ChatCompletionMessage{
-				{Role: "system", Content: systemPrompt},
-				{Role: "user", Content: userPrompt},
-			},
-			MaxTokens:   2000, // Increased for RAG responses
+		// Initial chat completion request with tools
+		chatReq := chat.ChatCompletionRequest{
+			Model:       model,
+			Messages:    messages,
+			Tools:       chatTools,
+			ToolChoice:  "auto", // Let model decide when to use tools
+			MaxTokens:   2000,   // Increased for RAG responses
 			Temperature: 0.7,
-		})
+		}
 
-		if err != nil {
-			log.Error("Chat completion failed",
-				"error", err,
-				"conversation_id", req.ConversationID,
-				"error_details", err.Error(),
-				"user_message", req.Message)
-			// Return error to user instead of generic template
-			assistantReply = fmt.Sprintf("Maaf, terjadi kesalahan saat memproses pesan Anda. Error: %v. Silakan coba lagi atau hubungi support.", err)
-		} else if resp == nil {
-			log.Error("Chat provider returned nil response",
-				"conversation_id", req.ConversationID,
-				"user_message", req.Message)
-			assistantReply = "Maaf, terjadi kesalahan saat memproses pesan Anda. Response kosong dari server. Silakan coba lagi."
-		} else if len(resp.Choices) == 0 {
-			log.Error("Chat provider returned empty choices",
-				"conversation_id", req.ConversationID,
-				"response_id", resp.ID,
-				"response_model", resp.Model,
-				"user_message", req.Message)
-			assistantReply = "Maaf, terjadi kesalahan saat memproses pesan Anda. Tidak ada response dari AI. Silakan coba lagi."
-		} else {
-			assistantReply = resp.Choices[0].Message.Content
-			if assistantReply == "" {
+		// Debug: Log the actual request being sent
+		if len(chatTools) > 0 {
+			log.Info("Chat request includes tools",
+				"tools_count", len(chatReq.Tools),
+				"tool_choice", chatReq.ToolChoice,
+				"conversation_id", req.ConversationID)
+		}
+
+		// Tool execution loop - continue until no more tool calls
+		maxToolIterations := 5 // Prevent infinite loops
+		toolExecutor := tools.NewExecutor(h.db)
+
+		for iteration := 0; iteration < maxToolIterations; iteration++ {
+			resp, err = chatProvider.CreateChatCompletion(ctx, chatReq)
+
+			if err != nil {
+				log.Error("Chat completion failed",
+					"error", err,
+					"conversation_id", req.ConversationID,
+					"error_details", err.Error(),
+					"user_message", req.Message,
+					"iteration", iteration)
+				assistantReply = fmt.Sprintf("Maaf, terjadi kesalahan saat memproses pesan Anda. Error: %v. Silakan coba lagi atau hubungi support.", err)
+				break
+			}
+
+			if resp == nil || len(resp.Choices) == 0 {
+				log.Error("Chat provider returned invalid response",
+					"conversation_id", req.ConversationID,
+					"iteration", iteration)
+				assistantReply = "Maaf, terjadi kesalahan saat memproses pesan Anda. Silakan coba lagi."
+				break
+			}
+
+			choice := resp.Choices[0]
+			message := choice.Message
+
+			// Check if there are tool calls
+			if len(message.ToolCalls) > 0 {
+				log.Info("Tool calls detected",
+					"conversation_id", req.ConversationID,
+					"tool_calls_count", len(message.ToolCalls),
+					"iteration", iteration)
+
+				// Execute all tool calls
+				toolResults := []*models.ToolResult{}
+				for _, toolCall := range message.ToolCalls {
+					// Convert chat.ToolCall to models.ToolCall
+					modelToolCall := models.ToolCall{
+						ID:   toolCall.ID,
+						Type: toolCall.Type,
+						Function: models.FuncCall{
+							Name:      toolCall.Function.Name,
+							Arguments: toolCall.Function.Arguments,
+						},
+					}
+					result, execErr := toolExecutor.ExecuteTool(ctx, companyID, modelToolCall)
+					if execErr != nil {
+						log.Error("Tool execution error",
+							"tool", toolCall.Function.Name,
+							"error", execErr,
+							"conversation_id", req.ConversationID)
+						result = &models.ToolResult{
+							ToolCallID: toolCall.ID,
+							Name:       toolCall.Function.Name,
+							Error:      fmt.Sprintf("Execution error: %v", execErr),
+						}
+					}
+					toolResults = append(toolResults, result)
+				}
+
+				// Format tool results as tool messages
+				toolMessages := tools.FormatToolResults(toolResults)
+
+				// Add assistant message with tool calls and tool results to conversation
+				messages = append(messages, message)         // Assistant message with tool_calls
+				messages = append(messages, toolMessages...) // Tool result messages
+
+				// Update chatReq.Messages for the next iteration
+				chatReq.Messages = messages
+
+				// Continue loop - send tool results back to AI
+				log.Info("Sending tool results back to AI",
+					"conversation_id", req.ConversationID,
+					"results_count", len(toolResults),
+					"iteration", iteration,
+					"total_messages", len(messages))
+				continue
+			}
+
+			// No tool calls - get final response
+			assistantReply = message.Content
+			if assistantReply == "" && choice.FinishReason != "tool_calls" {
 				log.Error("Chat provider returned empty content",
 					"conversation_id", req.ConversationID,
-					"choice_index", resp.Choices[0].Index,
-					"finish_reason", resp.Choices[0].FinishReason,
+					"choice_index", choice.Index,
+					"finish_reason", choice.FinishReason,
 					"user_message", req.Message)
 				assistantReply = "Maaf, terjadi kesalahan saat memproses pesan Anda. Response kosong. Silakan coba lagi."
-			} else {
-				log.Info("Chat completion successful",
-					"conversation_id", req.ConversationID,
-					"response_length", len(assistantReply),
-					"response_preview", func() string {
-						if len(assistantReply) > 100 {
-							return assistantReply[:100] + "..."
-						}
-						return assistantReply
-					}(),
-					"rag_used", ragUsed,
-					"model", model)
 			}
+
+			// Success - break out of loop
+			log.Info("Chat completion successful",
+				"conversation_id", req.ConversationID,
+				"response_length", len(assistantReply),
+				"rag_used", ragUsed,
+				"model", model,
+				"iterations", iteration+1)
+			break
+		}
+
+		// Fallback if we hit max iterations
+		if assistantReply == "" {
+			assistantReply = "Maaf, terjadi kesalahan saat memproses pesan Anda. Terlalu banyak iterasi tool. Silakan coba lagi."
+			log.Error("Max tool iterations reached",
+				"conversation_id", req.ConversationID,
+				"max_iterations", maxToolIterations)
 		}
 
 		// Extract citations from retrieved chunks
@@ -537,4 +729,44 @@ func (h *Handler) GetMessages(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, GetMessagesResponse{
 		Messages: messages,
 	})
+}
+
+// Helper function to safely get string from interface{}
+func getString(m map[string]interface{}, key string) string {
+	if val, ok := m[key]; ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+	}
+	return ""
+}
+
+// buildSystemPromptWithTools creates an enhanced system prompt with tool usage instructions
+func buildSystemPromptWithTools() string {
+	return `Kamu adalah Asisten Bantuaku, AI assistant untuk membantu UMKM Indonesia mengumpulkan dan mengelola data bisnis mereka.
+
+PANDUAN PENGUMPULAN DATA:
+1. Sebelum menjawab pertanyaan, periksa profil perusahaan menggunakan tool check_company_profile
+2. Jika ada field yang kosong (industry, city, location_region, business_model, social_media), tanyakan kepada user dengan ramah
+3. Gunakan tool update_company_info untuk menyimpan informasi perusahaan (industry, city, location, business_model, description)
+4. Gunakan tool update_company_social_media untuk menyimpan akun social media (instagram, tiktok, tokopedia, shopee, dll)
+5. Gunakan tool create_product untuk menambahkan produk/layanan yang disebutkan user
+6. Gunakan tool list_products untuk melihat produk yang sudah ada
+
+PANDUAN INTERAKSI:
+- Tanyakan dengan natural dan ramah, seperti sedang berbicara dengan teman
+- Sebelum menyimpan data penting, konfirmasi dengan user: "Apakah [field] adalah [value]?"
+- Hanya panggil tool setelah user mengkonfirmasi atau memberikan informasi yang jelas
+- Jika user tidak yakin, berikan contoh atau pilihan
+- Selalu jawab dalam Bahasa Indonesia yang natural
+
+CONTOH ALUR:
+User: "Saya punya bisnis kuliner"
+AI: [Cek profil] → "Di kota mana bisnis kuliner Anda berada?"
+User: "Jakarta"
+AI: [Konfirmasi] → "Baik, apakah bisnis Anda berada di Jakarta, DKI Jakarta?" 
+User: "Ya"
+AI: [Panggil update_company_info] → "Informasi perusahaan Anda telah disimpan. Apakah ada produk utama yang ingin Anda tambahkan?"
+
+Jawab dalam Bahasa Indonesia yang natural dan ramah.`
 }

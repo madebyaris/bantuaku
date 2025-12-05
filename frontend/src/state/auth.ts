@@ -4,15 +4,15 @@ import { persist } from 'zustand/middleware'
 interface AuthState {
   token: string | null
   userId: string | null
-  storeId: string | null
-  storeName: string | null
+  companyId: string | null
+  companyName: string | null
   plan: string | null
   isAuthenticated: boolean
   login: (data: {
     token: string
     user_id: string
-    store_id: string
-    store_name: string
+    company_id: string
+    company_name: string
     plan: string
   }) => void
   logout: () => void
@@ -23,16 +23,16 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       token: null,
       userId: null,
-      storeId: null,
-      storeName: null,
+      companyId: null,
+      companyName: null,
       plan: null,
       isAuthenticated: false,
       login: (data) =>
         set({
           token: data.token,
           userId: data.user_id,
-          storeId: data.store_id,
-          storeName: data.store_name,
+          companyId: data.company_id,
+          companyName: data.company_name,
           plan: data.plan,
           isAuthenticated: true,
         }),
@@ -40,8 +40,8 @@ export const useAuthStore = create<AuthState>()(
         set({
           token: null,
           userId: null,
-          storeId: null,
-          storeName: null,
+          companyId: null,
+          companyName: null,
           plan: null,
           isAuthenticated: false,
         }),

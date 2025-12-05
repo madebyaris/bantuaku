@@ -11,9 +11,6 @@ interface RequestOptions {
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { token, logout } = useAuthStore.getState()
   
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/caa1e494-1c2c-46ae-ab69-48afbc48a0f9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:request:entry',message:'API request initiated',data:{endpoint,method:options.method||'GET',hasToken:!!token},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...options.headers,
@@ -38,9 +35,6 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   }
   
   if (!response.ok) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/caa1e494-1c2c-46ae-ab69-48afbc48a0f9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:request:error',message:'API request failed',data:{status:response.status,statusText:response.statusText,endpoint},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     const error = await response.json().catch(() => ({ message: 'Request failed' }))
     throw new Error(error.message || error.error || 'Request failed')
   }

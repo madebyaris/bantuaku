@@ -12,35 +12,26 @@ type User struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-// Store represents an UMKM store
-type Store struct {
-	ID               string    `json:"id"`
-	UserID           string    `json:"user_id"`
-	StoreName        string    `json:"store_name"`
-	Industry         string    `json:"industry,omitempty"`
-	Location         string    `json:"location,omitempty"`
-	SubscriptionPlan string    `json:"subscription_plan"`
-	Status           string    `json:"status"`
-	CreatedAt        time.Time `json:"created_at"`
-}
+// Company is defined in company.go (has more fields for complete profile)
+// This comment left here for historical reference - previously was a simpler struct
 
 // Product represents a product catalog item
 type Product struct {
-	ID          string    `json:"id"`
-	StoreID     string    `json:"store_id"`
-	ProductName string    `json:"product_name"`
-	SKU         string    `json:"sku,omitempty"`
-	Category    string    `json:"category,omitempty"`
-	UnitPrice   float64   `json:"unit_price"`
-	Cost        float64   `json:"cost,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID        string    `json:"id"`
+	CompanyID string    `json:"company_id"`
+	Name      string    `json:"name"`
+	SKU       string    `json:"sku,omitempty"`
+	Category  string    `json:"category,omitempty"`
+	UnitPrice float64   `json:"unit_price"`
+	Cost      float64   `json:"cost,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Sale represents a sales history entry
 type Sale struct {
 	ID        int64     `json:"id"`
-	StoreID   string    `json:"store_id"`
+	CompanyID string    `json:"company_id"`
 	ProductID string    `json:"product_id"`
 	Quantity  int       `json:"quantity"`
 	Price     float64   `json:"price"`
@@ -76,7 +67,7 @@ type Recommendation struct {
 // Integration represents an external platform integration
 type Integration struct {
 	ID           string     `json:"id"`
-	StoreID      string     `json:"store_id"`
+	CompanyID    string     `json:"company_id"`
 	Platform     string     `json:"platform"` // woocommerce, shopee, tokopedia
 	Status       string     `json:"status"`   // connected, disconnected, error
 	LastSync     *time.Time `json:"last_sync,omitempty"`

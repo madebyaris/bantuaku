@@ -70,6 +70,9 @@ func extractUserID(ctx context.Context) *string {
 
 // extractCompanyID extracts company ID from context
 func extractCompanyID(ctx context.Context) *string {
+	if companyID, ok := ctx.Value("company_id").(string); ok && companyID != "" {
+		return &companyID
+	}
 	if companyID, ok := ctx.Value("store_id").(string); ok && companyID != "" {
 		return &companyID
 	}
@@ -156,17 +159,16 @@ func indexOf(s string, substr string) int {
 
 // Sensitive actions that should always be audited
 const (
-	ActionUserCreated      = "user.created"
-	ActionUserUpdated      = "user.updated"
-	ActionUserDeleted      = "user.deleted"
-	ActionUserRoleUpdated  = "user.role_updated"
+	ActionUserCreated         = "user.created"
+	ActionUserUpdated         = "user.updated"
+	ActionUserDeleted         = "user.deleted"
+	ActionUserRoleUpdated     = "user.role_updated"
 	ActionSubscriptionCreated = "subscription.created"
 	ActionSubscriptionUpdated = "subscription.updated"
 	ActionSubscriptionDeleted = "subscription.deleted"
-	ActionRegulationScraped = "regulation.scraped"
-	ActionTrendsIngested   = "trends.ingested"
-	ActionForecastGenerated = "forecast.generated"
-	ActionAdminLogin        = "admin.login"
-	ActionAdminLogout       = "admin.logout"
+	ActionRegulationScraped   = "regulation.scraped"
+	ActionTrendsIngested      = "trends.ingested"
+	ActionForecastGenerated   = "forecast.generated"
+	ActionAdminLogin          = "admin.login"
+	ActionAdminLogout         = "admin.logout"
 )
-

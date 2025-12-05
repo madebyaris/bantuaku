@@ -1,176 +1,164 @@
-import { 
-  Megaphone, 
-  Mail, 
-  Instagram, 
-  Target, 
-  TrendingUp, 
-  Users, 
-  ArrowRight,
-  Sparkles
-} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Megaphone, Sparkles, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
+import { api, Insight } from '@/lib/api'
 
 export function MarketingPage() {
+  const [insights, setInsights] = useState<Insight[]>([])
+  const [latest, setLatest] = useState<Insight | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    loadInsights()
+  }, [])
+
+  async function loadInsights() {
+    setLoading(true)
+    setError(null)
+    try {
+      const list = await api.insights.list(undefined, 'marketing_recommendation')
+      setInsights(list)
+      setLatest(list[0] || null)
+    } catch (err) {
+      setError('Gagal memuat insights marketing')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleGenerate() {
+    setGenerating(true)
+    setError(null)
+    try {
+      const created = await api.insights.generateMarketing()
+      const mapped: Insight = {
+        id: created.insight_id,
+        company_id: '',
+        type: created.type,
+        input_context: {},
+        result: created.result,
+        created_at: created.created_at,
+      }
+      setInsights((prev) => [mapped, ...prev])
+      setLatest(mapped)
+    } catch (err) {
+      setError('Gagal menghasilkan rekomendasi')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 animate-fade-in-up space-y-8 pb-20">
-      {/* Header */}
+    <div className="max-w-6xl mx-auto px-4 py-8 animate-fade-in-up space-y-6 pb-20">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <div className="p-2 bg-purple-500/10 rounded-lg border border-purple-500/20">
               <Megaphone className="w-5 h-5 text-purple-400" />
             </div>
-            <span className="text-sm font-medium text-purple-400 uppercase tracking-wider">Marketing Strategy</span>
+            <span className="text-sm font-medium text-purple-400 uppercase tracking-wider">
+              Marketing Strategy
+            </span>
           </div>
           <h1 className="text-3xl md:text-4xl font-display font-bold text-slate-100">
             Rekomendasi Marketing
           </h1>
           <p className="text-slate-400 mt-2 max-w-2xl text-lg">
-            Strategi promosi yang dipersonalisasi untuk meningkatkan engagement dan penjualan bisnis Anda.
+            Generate rekomendasi otomatis untuk kampanye Anda.
           </p>
         </div>
+        <Button
+          onClick={handleGenerate}
+          disabled={generating}
+          className="bg-purple-600 hover:bg-purple-500 text-white border-0"
+        >
+          {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+          Generate Rekomendasi
+        </Button>
       </div>
 
-      {/* Highlighted Strategy */}
-      <Card className="bg-gradient-to-br from-purple-900/20 to-black border-purple-500/20 relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-32 bg-purple-500/10 blur-3xl rounded-full -mr-16 -mt-16 pointer-events-none" />
-        <CardContent className="p-6 md:p-8 flex flex-col md:flex-row gap-8 items-center relative z-10">
-          <div className="flex-1">
-            <Badge className="bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border-purple-500/20 mb-4">Top Recommendation</Badge>
-            <h2 className="text-2xl font-bold text-slate-100 mb-2">Bundle "Ramadhan Special"</h2>
-            <p className="text-slate-300 mb-6 leading-relaxed">
-              Berdasarkan tren musiman, membuat paket bundling produk Best Seller dengan item pelengkap dapat meningkatkan Average Order Value (AOV) sebesar 15-20%.
-            </p>
-            <div className="flex gap-4">
-              <Button className="bg-purple-600 hover:bg-purple-500 text-white border-0">
-                <Sparkles className="w-4 h-4 mr-2" />
-                Generate Konten Iklan
-              </Button>
-              <Button variant="outline" className="border-white/10 hover:bg-white/5 text-slate-300">
-                Lihat Detail Strategi
-              </Button>
-            </div>
-          </div>
-          <div className="w-full md:w-1/3 bg-black/40 p-6 rounded-xl border border-white/5 backdrop-blur-sm">
-            <h4 className="text-sm font-medium text-slate-400 mb-4">Estimasi Dampak</h4>
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-slate-200">Potential Reach</span>
-                  <span className="text-purple-400 font-bold">15k+</span>
+      {error && (
+        <Card className="border-red-500/20 bg-red-500/5">
+          <CardContent className="py-3 text-sm text-red-200">{error}</CardContent>
+        </Card>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+        </div>
+      ) : latest ? (
+        <Card className="bg-gradient-to-br from-purple-900/20 to-black border-purple-500/20">
+          <CardHeader>
+            <CardTitle className="text-lg text-slate-100">Rekomendasi Terbaru</CardTitle>
+            <CardDescription className="text-slate-400">
+              Dibuat pada {new Date(latest.created_at).toLocaleString('id-ID')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {Array.isArray(latest.result?.recommendations) && latest.result.recommendations.length > 0 ? (
+              (latest.result.recommendations as Array<Record<string, unknown>>).map((rec, idx) => (
+                <div key={idx} className="p-3 rounded-lg border border-white/10 bg-white/5">
+                  <p className="text-sm text-slate-200 font-semibold">
+                    {(rec.title as string) || `Rekomendasi ${idx + 1}`}
+                  </p>
+                  {rec.description && (
+                    <p className="text-sm text-slate-400 mt-1">{rec.description as string}</p>
+                  )}
                 </div>
-                <Progress value={75} className="h-2 bg-white/5 [&>div]:bg-purple-500" />
-              </div>
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-slate-200">Conversion Rate</span>
-                  <span className="text-purple-400 font-bold">4.2%</span>
+              ))
+            ) : (
+              <p className="text-sm text-slate-300">
+                {latest.result?.message ||
+                  'Belum ada rekomendasi. Gunakan tombol Generate untuk membuat rekomendasi baru.'}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="py-12 text-center text-slate-400">
+            Belum ada rekomendasi. Klik “Generate Rekomendasi” untuk memulai.
+          </CardContent>
+        </Card>
+      )}
+
+      {insights.length > 1 && (
+        <Card className="border-white/10 bg-white/5">
+          <CardHeader>
+            <CardTitle className="text-lg text-slate-100">Riwayat</CardTitle>
+            <CardDescription className="text-slate-400">
+              Rekomendasi sebelumnya
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {insights.slice(1).map((insight) => (
+              <div
+                key={insight.id}
+                className="p-3 rounded-lg border border-white/10 bg-white/5 flex items-center justify-between"
+              >
+                <div>
+                  <p className="text-sm text-slate-200">Rekomendasi</p>
+                  <p className="text-xs text-slate-500">
+                    {new Date(insight.created_at).toLocaleString('id-ID')}
+                  </p>
                 </div>
-                <Progress value={60} className="h-2 bg-white/5 [&>div]:bg-purple-500" />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-white/10 text-slate-200"
+                  onClick={() => setLatest(insight)}
+                >
+                  Lihat
+                </Button>
               </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Channel Strategies */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="hover-card-effect border-white/10 bg-white/5">
-          <CardHeader>
-            <div className="w-10 h-10 rounded-full bg-pink-500/10 flex items-center justify-center mb-2">
-              <Instagram className="w-5 h-5 text-pink-400" />
-            </div>
-            <CardTitle className="text-slate-100">Social Media</CardTitle>
-            <CardDescription className="text-slate-400">Optimasi konten Instagram & TikTok</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-3 mb-4">
-              <li className="text-sm text-slate-300 flex gap-2">
-                <CheckCircleIcon className="w-4 h-4 text-emerald-400 shrink-0" />
-                Posting Reels "Behind the Scene"
-              </li>
-              <li className="text-sm text-slate-300 flex gap-2">
-                <CheckCircleIcon className="w-4 h-4 text-emerald-400 shrink-0" />
-                Kolaborasi dengan Micro-Influencer lokal
-              </li>
-            </ul>
-            <Button variant="link" className="p-0 h-auto text-pink-400 hover:text-pink-300">
-              Lihat Kalender Konten <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
+            ))}
           </CardContent>
         </Card>
-
-        <Card className="hover-card-effect border-white/10 bg-white/5">
-          <CardHeader>
-            <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center mb-2">
-              <Mail className="w-5 h-5 text-blue-400" />
-            </div>
-            <CardTitle className="text-slate-100">Email & Chat</CardTitle>
-            <CardDescription className="text-slate-400">Retensi pelanggan via WhatsApp/Email</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-3 mb-4">
-              <li className="text-sm text-slate-300 flex gap-2">
-                <CheckCircleIcon className="w-4 h-4 text-emerald-400 shrink-0" />
-                Blast promo "Payday Sale"
-              </li>
-              <li className="text-sm text-slate-300 flex gap-2">
-                <CheckCircleIcon className="w-4 h-4 text-emerald-400 shrink-0" />
-                Reminder keranjang belanja (Abandoned Cart)
-              </li>
-            </ul>
-            <Button variant="link" className="p-0 h-auto text-blue-400 hover:text-blue-300">
-              Buat Template Pesan <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="hover-card-effect border-white/10 bg-white/5">
-          <CardHeader>
-            <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center mb-2">
-              <Target className="w-5 h-5 text-amber-400" />
-            </div>
-            <CardTitle className="text-slate-100">Paid Ads</CardTitle>
-            <CardDescription className="text-slate-400">Iklan tertarget Meta & Google</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-3 mb-4">
-              <li className="text-sm text-slate-300 flex gap-2">
-                <CheckCircleIcon className="w-4 h-4 text-emerald-400 shrink-0" />
-                Target audiens umur 18-25 di radius 5km
-              </li>
-              <li className="text-sm text-slate-300 flex gap-2">
-                <CheckCircleIcon className="w-4 h-4 text-emerald-400 shrink-0" />
-                Retargeting pengunjung website
-              </li>
-            </ul>
-            <Button variant="link" className="p-0 h-auto text-amber-400 hover:text-amber-300">
-              Setup Iklan <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      )}
     </div>
   )
-}
-
-function CheckCircleIcon({ className }: { className?: string }) {
-    return (
-        <svg 
-            xmlns="http://www.w3.org/2000/svg" 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke="currentColor" 
-            strokeWidth="2" 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
-            className={className}
-        >
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <polyline points="22 4 12 14.01 9 11.01" />
-        </svg>
-    )
 }

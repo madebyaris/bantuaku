@@ -338,6 +338,14 @@ See `.env.example` for complete configuration options and documentation.
 - [ ] **Multi-Company Management** - Support for multiple businesses per user
 - [ ] **Export Reports** - PDF/Excel export for forecasts and insights
 
+## Status Update (Dec 2025)
+- Company/store model unified to `company_id` across backend + frontend (new migration 017).
+- Forecast, market, marketing, and regulation pages now call live APIs (no more static UI).
+- Notifications API + UI added (list/read/delete) with new migration 018.
+- Billing pages added (pricing + billing) wired to Stripe checkout endpoints.
+- Chat shows RAG citations returned by `/chat/message`.
+- Regulation/Trends wiring is live; marketplace connectors and advanced forecasting remain roadmap items.
+
 ## 🏗️ Architecture
 
 ### High-Level Architecture

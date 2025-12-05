@@ -46,7 +46,7 @@ export function ProductsPage() {
   }
 
   const filteredProducts = products.filter((p) =>
-    p.product_name.toLowerCase().includes(searchTerm.toLowerCase())
+    p.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   if (loading) {
@@ -105,7 +105,7 @@ export function ProductsPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <h3 className="font-semibold text-slate-900">
-                        {product.product_name}
+                        {product.name}
                       </h3>
                       <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
                         {product.sku && <span>SKU: {product.sku}</span>}
@@ -135,7 +135,7 @@ export function ProductsPage() {
                 <CardContent className="space-y-4">
                   <div>
                     <Label className="text-slate-500">Nama Produk</Label>
-                    <p className="font-semibold">{selectedProduct.product_name}</p>
+                    <p className="font-semibold">{selectedProduct.name}</p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>

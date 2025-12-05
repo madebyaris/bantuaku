@@ -68,6 +68,11 @@ func (h *Handler) GenerateMonthlyForecast(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	companyID := middleware.GetCompanyID(ctx)
 
+	if h.config.ForecastingServiceURL == "" {
+		h.respondError(w, errors.NewValidationError("FORECASTING_SERVICE_URL not configured", ""), r)
+		return
+	}
+
 	// Check forecast usage limit
 	usageService := usage.NewService(h.db)
 	canForecast, limitMsg, err := usageService.CheckForecastLimit(ctx, companyID)
