@@ -10,8 +10,11 @@ import (
 
 	"github.com/bantuaku/backend/config"
 	"github.com/bantuaku/backend/handlers"
+	adminhandlers "github.com/bantuaku/backend/handlers/admin"
 	"github.com/bantuaku/backend/logger"
 	"github.com/bantuaku/backend/middleware"
+	"github.com/bantuaku/backend/services/audit"
+	"github.com/bantuaku/backend/services/billing"
 	"github.com/bantuaku/backend/services/storage"
 )
 
@@ -54,6 +57,18 @@ func main() {
 	h := handlers.New(db, redis, cfg)
 	log.Info("HTTP handlers initialized")
 
+	// Initialize audit logger
+	auditLogger := audit.NewLogger(db)
+	log.Info("Audit logger initialized")
+
+	// Initialize Stripe billing service (if configured)
+	var billingHandler *handlers.BillingHandler
+	if cfg.StripeSecretKey != "" {
+		stripeService := billing.NewStripeService(cfg.StripeSecretKey, cfg.StripeWebhookSecret, db)
+		billingHandler = handlers.NewBillingHandler(stripeService, db)
+		log.Info("Stripe billing service initialized")
+	}
+
 	// Setup router
 	mux := http.NewServeMux()
 
@@ -63,6 +78,10 @@ func main() {
 	// Auth routes (public)
 	mux.HandleFunc("POST /api/v1/auth/register", h.Register)
 	mux.HandleFunc("POST /api/v1/auth/login", h.Login)
+	mux.HandleFunc("POST /api/v1/auth/verify-email", h.VerifyEmail)
+	mux.HandleFunc("POST /api/v1/auth/resend-verification", h.ResendVerification)
+	mux.HandleFunc("POST /api/v1/auth/forgot-password", h.RequestPasswordReset)
+	mux.HandleFunc("POST /api/v1/auth/reset-password", h.ResetPassword)
 
 	// Protected routes
 	mux.HandleFunc("GET /api/v1/products", middleware.Auth(cfg.JWTSecret, h.ListProducts))
@@ -84,6 +103,12 @@ func main() {
 	// Forecasting
 	mux.HandleFunc("GET /api/v1/forecasts/{product_id}", middleware.Auth(cfg.JWTSecret, h.GetForecast))
 	mux.HandleFunc("GET /api/v1/recommendations", middleware.Auth(cfg.JWTSecret, h.GetRecommendations))
+	
+	// Advanced Forecasting (12-month)
+	mux.HandleFunc("GET /api/v1/forecasts/monthly", middleware.Auth(cfg.JWTSecret, h.GetMonthlyForecasts))
+	mux.HandleFunc("POST /api/v1/forecasts/monthly/generate", middleware.Auth(cfg.JWTSecret, h.GenerateMonthlyForecast))
+	mux.HandleFunc("GET /api/v1/strategies/monthly", middleware.Auth(cfg.JWTSecret, h.GetMonthlyStrategies))
+	mux.HandleFunc("POST /api/v1/strategies/monthly/generate", middleware.Auth(cfg.JWTSecret, h.GenerateStrategies))
 
 	// Sentiment & Market
 	mux.HandleFunc("GET /api/v1/sentiment/{product_id}", middleware.Auth(cfg.JWTSecret, h.GetSentiment))
@@ -97,6 +122,7 @@ func main() {
 	mux.HandleFunc("POST /api/v1/chat/message", middleware.Auth(cfg.JWTSecret, h.SendMessage))
 	mux.HandleFunc("GET /api/v1/chat/conversations", middleware.Auth(cfg.JWTSecret, h.GetConversations))
 	mux.HandleFunc("GET /api/v1/chat/messages", middleware.Auth(cfg.JWTSecret, h.GetMessages))
+	mux.HandleFunc("POST /api/v1/chat/feedback", middleware.Auth(cfg.JWTSecret, h.SubmitFeedback))
 
 	// File Uploads (NEW)
 	mux.HandleFunc("POST /api/v1/files/upload", middleware.Auth(cfg.JWTSecret, h.UploadFile))
@@ -111,6 +137,56 @@ func main() {
 
 	// Dashboard
 	mux.HandleFunc("GET /api/v1/dashboard/summary", middleware.Auth(cfg.JWTSecret, h.DashboardSummary))
+
+	// Regulations scraper (admin endpoints) - with rate limiting
+	scrapingRateLimit := middleware.RateLimiter(redis, middleware.DefaultRateLimitConfigs.Scraping)
+	mux.Handle("POST /api/v1/regulations/scrape", scrapingRateLimit(middleware.Auth(cfg.JWTSecret, h.TriggerScraping)))
+	mux.HandleFunc("GET /api/v1/regulations/status", middleware.Auth(cfg.JWTSecret, h.GetScrapingStatus))
+	mux.HandleFunc("GET /api/v1/regulations", middleware.Auth(cfg.JWTSecret, h.ListRegulations))
+
+	// Embeddings & Vectorization
+	mux.HandleFunc("POST /api/v1/embeddings/index", middleware.Auth(cfg.JWTSecret, h.IndexChunks))
+	mux.HandleFunc("GET /api/v1/regulations/search", middleware.Auth(cfg.JWTSecret, h.SearchRegulations))
+
+	// Google Trends - with rate limiting
+	trendsRateLimit := middleware.RateLimiter(redis, middleware.DefaultRateLimitConfigs.Trends)
+	mux.Handle("POST /api/v1/trends/keywords", trendsRateLimit(middleware.Auth(cfg.JWTSecret, h.CreateKeyword)))
+	mux.HandleFunc("GET /api/v1/trends/keywords", middleware.Auth(cfg.JWTSecret, h.ListKeywords))
+	mux.HandleFunc("DELETE /api/v1/trends/keywords", middleware.Auth(cfg.JWTSecret, h.DeleteKeyword))
+	mux.HandleFunc("GET /api/v1/trends/series", middleware.Auth(cfg.JWTSecret, h.GetTimeSeries))
+	mux.Handle("POST /api/v1/trends/ingest", trendsRateLimit(middleware.Auth(cfg.JWTSecret, h.TriggerIngestion)))
+
+	// Admin routes (RBAC protected) - with rate limiting
+	adminHandler := adminhandlers.NewAdminHandler(db, cfg.JWTSecret, auditLogger)
+	adminRateLimit := middleware.RateLimiter(redis, middleware.DefaultRateLimitConfigs.Admin)
+	adminAuth := func(handler http.HandlerFunc) http.Handler {
+		return adminRateLimit(middleware.Auth(cfg.JWTSecret, middleware.RequireAdmin(handler)))
+	}
+	
+	mux.Handle("GET /api/v1/admin/users", adminAuth(adminHandler.ListUsers))
+	mux.Handle("GET /api/v1/admin/users/{id}", adminAuth(adminHandler.GetUser))
+	mux.Handle("POST /api/v1/admin/users", adminAuth(adminHandler.CreateUser))
+	mux.Handle("PUT /api/v1/admin/users/{id}", adminAuth(adminHandler.UpdateUser))
+	mux.Handle("PUT /api/v1/admin/users/{id}/role", adminAuth(adminHandler.UpdateUserRole))
+	mux.Handle("PUT /api/v1/admin/users/{id}/status", adminAuth(adminHandler.UpdateUserStatus))
+	mux.Handle("PUT /api/v1/admin/users/{id}/upgrade-subscription", adminAuth(adminHandler.UpgradeUserSubscription))
+	mux.Handle("DELETE /api/v1/admin/users/{id}", adminAuth(adminHandler.DeleteUser))
+	mux.Handle("GET /api/v1/admin/stats", adminAuth(adminHandler.GetStats))
+	
+	mux.Handle("GET /api/v1/admin/subscriptions", adminAuth(adminHandler.ListSubscriptions))
+	mux.Handle("GET /api/v1/admin/subscriptions/{id}", adminAuth(adminHandler.GetSubscription))
+	mux.Handle("POST /api/v1/admin/subscriptions", adminAuth(adminHandler.CreateSubscription))
+	mux.Handle("PUT /api/v1/admin/subscriptions/{id}/status", adminAuth(adminHandler.UpdateSubscriptionStatus))
+	
+	mux.Handle("GET /api/v1/admin/audit-logs", adminAuth(adminHandler.ListAuditLogs))
+
+	// Billing routes (if Stripe is configured)
+	if billingHandler != nil {
+		mux.HandleFunc("POST /api/v1/billing/checkout", middleware.Auth(cfg.JWTSecret, billingHandler.CreateCheckoutSession))
+		mux.HandleFunc("GET /api/v1/billing/subscription", middleware.Auth(cfg.JWTSecret, billingHandler.GetSubscription))
+		mux.HandleFunc("GET /api/v1/billing/plans", billingHandler.ListPlans) // Public endpoint
+		mux.HandleFunc("POST /api/v1/billing/webhook", billingHandler.HandleWebhook) // Webhook doesn't need auth
+	}
 
 	// Apply middleware stack
 	handler := middleware.Chain(

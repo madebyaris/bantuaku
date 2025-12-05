@@ -12,7 +12,7 @@ services:
       - KOLOSAL_API_KEY=${KOLOSAL_API_KEY:-}
       - LOG_LEVEL=debug
       - PORT=8080
-      - CORS_ORIGIN=http://localhost:3000
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:3001
     depends_on:
       db:
         condition: service_healthy
@@ -37,8 +37,26 @@ services:
     stdin_open: true
     tty: true
 
+  admin:
+    image: node:20-alpine
+    working_dir: /app
+    ports:
+      - "3001:3001"
+    environment:
+      - VITE_API_URL=http://backend:8080
+      - CHOKIDAR_USEPOLLING=true
+      - DOCKER=true
+    depends_on:
+      - backend
+    volumes:
+      - ./admin:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev -- --host --port 3001"
+    stdin_open: true
+    tty: true
+
   db:
-    image: postgres:18-alpine
+    image: pgvector/pgvector:pg18
     ports:
       - "5432:5432"
     environment:
@@ -46,7 +64,7 @@ services:
       - POSTGRES_USER=bantuaku
       - POSTGRES_PASSWORD=bantuaku_secret
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql
       - ./database/migrations:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U bantuaku -d bantuaku_dev"]

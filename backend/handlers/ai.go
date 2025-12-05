@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"bantuaku/backend/services/kolosal"
+	"github.com/bantuaku/backend/services/kolosal"
 
 	"github.com/bantuaku/backend/middleware"
 	"github.com/bantuaku/backend/models"
@@ -117,18 +117,18 @@ func (h *Handler) gatherStoreContext(ctx context.Context, storeID string) StoreC
 	sc := StoreContext{}
 
 	// Get store name
-	h.db.Pool().QueryRow(ctx, `SELECT store_name FROM stores WHERE id = $1`, storeID).Scan(&sc.StoreName)
+	h.db.Pool().QueryRow(ctx, `SELECT name FROM companies WHERE id = $1`, storeID).Scan(&sc.StoreName)
 
 	// Get total products
-	h.db.Pool().QueryRow(ctx, `SELECT COUNT(*) FROM products WHERE store_id = $1`, storeID).Scan(&sc.TotalProducts)
+	h.db.Pool().QueryRow(ctx, `SELECT COUNT(*) FROM products WHERE company_id = $1`, storeID).Scan(&sc.TotalProducts)
 
 	// Get top products with sales
 	rows2, _ := h.db.Pool().Query(ctx, `
-		SELECT p.product_name, COALESCE(SUM(s.quantity), 0) as sales
+		SELECT p.name, COALESCE(SUM(s.quantity), 0) as sales
 		FROM products p
 		LEFT JOIN sales_history s ON p.id = s.product_id AND s.sale_date >= $2
-		WHERE p.store_id = $1
-		GROUP BY p.id, p.product_name
+		WHERE p.company_id = $1
+		GROUP BY p.id, p.name
 		ORDER BY sales DESC
 		LIMIT 5
 	`, storeID, time.Now().AddDate(0, 0, -30))
@@ -147,7 +147,7 @@ func (h *Handler) gatherStoreContext(ctx context.Context, storeID string) StoreC
 	h.db.Pool().QueryRow(ctx, `
 		SELECT COALESCE(SUM(quantity * price), 0)
 		FROM sales_history
-		WHERE store_id = $1 AND sale_date >= $2
+		WHERE company_id = $1 AND sale_date >= $2
 	`, storeID, time.Now().AddDate(0, 0, -30)).Scan(&sc.RecentRevenue)
 
 	return sc

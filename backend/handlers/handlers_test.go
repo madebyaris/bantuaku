@@ -17,7 +17,7 @@ import (
 
 // testDB is a test database wrapper
 type testDB struct {
-	*storage.PostgresDB
+	*storage.Postgres
 }
 
 // setupTestDB creates a test database connection
@@ -46,13 +46,13 @@ func cleanupTestDB(t *testing.T, db *testDB) {
 	}
 
 	for _, table := range tables {
-		_, err := db.Pool().Exec(context.Background(), "DELETE FROM "+table)
+		_, err := db.Postgres.Pool().Exec(context.Background(), "DELETE FROM "+table)
 		if err != nil {
 			t.Logf("Warning: Failed to clean up table %s: %v", table, err)
 		}
 	}
 
-	db.Close()
+	db.Postgres.Close()
 }
 
 // setupTestHandler creates a test handler with test dependencies
@@ -75,7 +75,7 @@ func setupTestHandler(t *testing.T) (*Handler, *testDB) {
 		CORSOrigin:    "http://localhost:3000",
 	}
 
-	handler := New(db, redis, cfg)
+	handler := New(db.Postgres, redis, cfg)
 
 	return handler, db
 }
@@ -177,7 +177,7 @@ func TestLoginHandler(t *testing.T) {
 	storeID := uuid.New().String()
 
 	// Insert test user directly into database
-	_, err := db.Pool().Exec(context.Background(), `
+	_, err := db.Postgres.Pool().Exec(context.Background(), `
 		INSERT INTO users (id, email, password_hash, created_at)
 		VALUES ($1, $2, $3, $4)
 	`, userID, "test@example.com", "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.RSIaYEG9sFKqFqz2Py", time.Now())
@@ -186,7 +186,7 @@ func TestLoginHandler(t *testing.T) {
 	}
 
 	// Insert test store
-	_, err = db.Pool().Exec(context.Background(), `
+	_, err = db.Postgres.Pool().Exec(context.Background(), `
 		INSERT INTO stores (id, user_id, store_name, subscription_plan, status, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, storeID, userID, "Test Store", "free", "active", time.Now())
@@ -308,7 +308,7 @@ func TestProductHandlers(t *testing.T) {
 	storeID := uuid.New().String()
 
 	// Create test user
-	_, err := db.Pool().Exec(context.Background(), `
+	_, err := db.Postgres.Pool().Exec(context.Background(), `
 		INSERT INTO users (id, email, password_hash, created_at)
 		VALUES ($1, $2, $3, $4)
 	`, userID, "test@example.com", "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.RSIaYEG9sFKqFqz2Py", time.Now())
@@ -317,7 +317,7 @@ func TestProductHandlers(t *testing.T) {
 	}
 
 	// Create test store
-	_, err = db.Pool().Exec(context.Background(), `
+	_, err = db.Postgres.Pool().Exec(context.Background(), `
 		INSERT INTO stores (id, user_id, store_name, subscription_plan, status, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, storeID, userID, "Test Store", "free", "active", time.Now())
@@ -326,7 +326,7 @@ func TestProductHandlers(t *testing.T) {
 	}
 
 	// Generate JWT token
-	token, err := handler.generateToken(userID, storeID)
+	token, err := handler.generateToken(userID, storeID, "user")
 	if err != nil {
 		t.Fatalf("Failed to generate test token: %v", err)
 	}

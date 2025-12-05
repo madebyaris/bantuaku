@@ -157,51 +157,57 @@ func generateSampleSentiment(productID, productName string) models.SentimentData
 }
 
 func generateSampleTrends(categories []string) []models.MarketTrend {
+	growth1 := 25.5
+	growth2 := 18.3
+	growth3 := 15.2
+	growth4 := 32.1
+	growth5 := 12.4
 	trends := []models.MarketTrend{
 		{
-			Name:       "Produk Ramah Lingkungan",
+			TrendName:  "Produk Ramah Lingkungan",
 			Category:   "eco-friendly",
 			TrendScore: 0.85,
-			GrowthRate: 25.5,
+			GrowthRate: &growth1,
 			Source:     "google_trends",
 		},
 		{
-			Name:       "Fashion Lokal Indonesia",
+			TrendName:  "Fashion Lokal Indonesia",
 			Category:   "fashion",
 			TrendScore: 0.78,
-			GrowthRate: 18.3,
+			GrowthRate: &growth2,
 			Source:     "social_media",
 		},
 		{
-			Name:       "Makanan Sehat",
+			TrendName:  "Makanan Sehat",
 			Category:   "food",
 			TrendScore: 0.72,
-			GrowthRate: 15.2,
+			GrowthRate: &growth3,
 			Source:     "marketplace",
 		},
 		{
-			Name:       "Skincare Natural",
+			TrendName:  "Skincare Natural",
 			Category:   "beauty",
 			TrendScore: 0.88,
-			GrowthRate: 32.1,
+			GrowthRate: &growth4,
 			Source:     "instagram",
 		},
 		{
-			Name:       "Gadget Accessories",
+			TrendName:  "Gadget Accessories",
 			Category:   "electronics",
 			TrendScore: 0.65,
-			GrowthRate: 12.4,
+			GrowthRate: &growth5,
 			Source:     "marketplace",
 		},
 	}
 
 	// Add category-specific trends
 	for _, cat := range categories {
+		growth := 10.0 + float64(len(cat)%20)
 		trends = append(trends, models.MarketTrend{
-			Name:       fmt.Sprintf("Trend %s", cat),
+			TrendName:  fmt.Sprintf("Trend %s", cat),
 			Category:   cat,
 			TrendScore: 0.6 + (float64(len(cat)%30) / 100.0),
-			GrowthRate: 10.0 + float64(len(cat)%20),
+			GrowthRate: &growth,
 			Source:     "analysis",
 		})
 	}

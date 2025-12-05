@@ -33,8 +33,9 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   }
   
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Request failed' }))
-    throw new Error(error.error || 'Request failed')
+    const error = await response.json().catch(() => ({ message: 'Request failed' }))
+    // Backend returns { code, message, details } format
+    throw new Error(error.message || error.error || 'Request failed')
   }
   
   return response.json()
@@ -56,14 +57,31 @@ export const api = {
       }),
     register: (email: string, password: string, storeName: string, industry?: string) =>
       request<{
-        token: string
-        user_id: string
-        store_id: string
-        store_name: string
-        plan: string
+        message: string
+        email: string
       }>('/auth/register', {
         method: 'POST',
         body: { email, password, store_name: storeName, industry },
+      }),
+    verifyEmail: (email: string, otp: string) =>
+      request<{ message: string }>('/auth/verify-email', {
+        method: 'POST',
+        body: { email, otp },
+      }),
+    resendVerification: (email: string) =>
+      request<{ message: string }>('/auth/resend-verification', {
+        method: 'POST',
+        body: { email },
+      }),
+    forgotPassword: (email: string) =>
+      request<{ message: string }>('/auth/forgot-password', {
+        method: 'POST',
+        body: { email },
+      }),
+    resetPassword: (token: string, newPassword: string) =>
+      request<{ message: string }>('/auth/reset-password', {
+        method: 'POST',
+        body: { token, new_password: newPassword },
       }),
   },
   
@@ -182,6 +200,62 @@ export const api = {
       return request<FileUpload[]>(`/files?${params.toString()}`)
     },
     get: (id: string) => request<FileUpload>(`/files/${id}`),
+  },
+
+  regulations: {
+    scrape: (maxPages?: number) => {
+      const params = new URLSearchParams()
+      if (maxPages) params.append('max_pages', maxPages.toString())
+      return request<{
+        message: string
+        max_pages: number
+        status: string
+      }>(`/regulations/scrape?${params.toString()}`, { method: 'POST' })
+    },
+    status: () =>
+      request<{
+        total_regulations: number
+        total_chunks: number
+        last_scrape: string | null
+      }>('/regulations/status'),
+    list: (category?: string, limit?: number, offset?: number) => {
+      const params = new URLSearchParams()
+      if (category) params.append('category', category)
+      if (limit) params.append('limit', limit.toString())
+      if (offset) params.append('offset', offset.toString())
+      return request<{
+        regulations: Regulation[]
+        count: number
+        limit: number
+        offset: number
+      }>(`/regulations?${params.toString()}`)
+    },
+    search: (query: string, k?: number, filters?: {
+      year?: number
+      category?: string
+      status?: string
+    }) => {
+      const params = new URLSearchParams()
+      params.append('q', query)
+      if (k) params.append('k', k.toString())
+      if (filters?.year) params.append('year', filters.year.toString())
+      if (filters?.category) params.append('category', filters.category)
+      if (filters?.status) params.append('status', filters.status)
+      return request<{
+        query: string
+        results: RegulationSearchResult[]
+        count: number
+      }>(`/regulations/search?${params.toString()}`)
+    },
+    indexChunks: (limit?: number) => {
+      const params = new URLSearchParams()
+      if (limit) params.append('limit', limit.toString())
+      return request<{
+        message: string
+        limit: number
+        status: string
+      }>(`/embeddings/index?${params.toString()}`, { method: 'POST' })
+    },
   },
 }
 
@@ -412,4 +486,33 @@ export interface FileUpload {
   error_message?: string
   created_at: string
   processed_at?: string
+}
+
+export interface Regulation {
+  id: string
+  title: string
+  regulation_number: string | null
+  year: number | null
+  category: string | null
+  status: string
+  source_url: string
+  pdf_url: string | null
+  published_date: string | null
+  effective_date: string | null
+  created_at: string
+}
+
+export interface RegulationSearchResult {
+  chunk_id: string
+  regulation_id: string
+  chunk_text: string
+  similarity: number
+  regulation: {
+    id: string
+    title: string
+    regulation_number: string | null
+    year: number | null
+    category: string | null
+    pdf_url: string | null
+  }
 }
