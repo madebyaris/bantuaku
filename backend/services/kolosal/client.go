@@ -130,23 +130,23 @@ func (c *Client) CreateChatCompletion(ctx context.Context, req ChatCompletionReq
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error: %d - %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("API error: status code %d", resp.StatusCode)
 	}
 
 	var chatResp ChatCompletionResponse
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w, body: %s", err, string(bodyBytes))
+		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	// Validate response has choices
 	if len(chatResp.Choices) == 0 {
-		return nil, fmt.Errorf("empty choices in response: %s", string(bodyBytes))
+		return nil, fmt.Errorf("empty choices in response")
 	}
 
 	// Validate first choice has message content OR tool_calls
 	// Tool calls are valid even without content
 	if chatResp.Choices[0].Message.Content == "" && len(chatResp.Choices[0].Message.ToolCalls) == 0 {
-		return nil, fmt.Errorf("empty message content and no tool calls in response: %s", string(bodyBytes))
+		return nil, fmt.Errorf("empty message content and no tool calls in response")
 	}
 
 	return &chatResp, nil

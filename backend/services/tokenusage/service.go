@@ -45,12 +45,12 @@ type ModelUsage struct {
 	RequestCount     int     `json:"request_count"`
 }
 
-// Model pricing (tokens per IDR) - approximate rates
+// Model pricing (IDR per token) - approximate rates
 var modelPricing = map[string]float64{
-	"openai/gpt-4o-mini":              0.000001,  // ~1M tokens per IDR (approximate)
-	"openai/gpt-4o":                   0.00001,   // ~100K tokens per IDR
-	"GLM 4.6":                         0.0000005, // ~2M tokens per IDR (approximate)
-	"qwen/qwen-3-vl-30b-a3b-instruct": 0.000002,  // ~500K tokens per IDR
+	"openai/gpt-4o-mini":              0.000001,  // ~0.000001 IDR per token
+	"openai/gpt-4o":                   0.00001,   // ~0.00001 IDR per token
+	"GLM 4.6":                         0.0000005, // ~0.0000005 IDR per token
+	"qwen/qwen-3-vl-30b-a3b-instruct": 0.000002,  // ~0.000002 IDR per token
 }
 
 // Service handles token usage tracking
@@ -129,7 +129,6 @@ func (s *Service) GetUsageStats(ctx context.Context, companyID *string, model *s
 	if endDate != nil {
 		query += ` AND created_at <= $` + fmt.Sprintf("%d", argIndex)
 		args = append(args, *endDate)
-		argIndex++
 	}
 
 	stats := &UsageStats{}
@@ -315,7 +314,10 @@ func (s *Service) GetTokenUsage(ctx context.Context, companyID *string, model *s
 	}
 
 	var total int
-	s.db.Pool().QueryRow(ctx, countQuery, countArgs...).Scan(&total)
+	if err := s.db.Pool().QueryRow(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+		// Log error but continue with total = 0 for pagination
+		total = 0
+	}
 
 	return usages, total, nil
 }

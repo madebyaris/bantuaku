@@ -15,10 +15,10 @@ import (
 func (h *Handler) IndexChunks(w http.ResponseWriter, r *http.Request) {
 	log := logger.With("request_id", r.Context().Value("request_id"))
 
-	// Get limit query parameter (default: 100)
+	// Get limit query parameter (default: 100, max: 10000)
 	limit := 100
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 10000 {
 			limit = parsed
 		}
 	}
@@ -36,14 +36,16 @@ func (h *Handler) IndexChunks(w http.ResponseWriter, r *http.Request) {
 
 	// Run indexing in goroutine with detached context (request context will be cancelled)
 	go func() {
+		// Create a new logger for the goroutine without request-scoped values
+		bgLog := logger.With("job", "index_chunks", "limit", limit)
 		// Use background context with timeout since request context will be cancelled
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
 		count, err := indexer.IndexChunks(ctx, limit)
 		if err != nil {
-			log.Error("Indexing failed", "error", err)
+			bgLog.Error("Indexing failed", "error", err)
 		} else {
-			log.Info("Indexing completed", "indexed", count)
+			bgLog.Info("Indexing completed", "indexed", count)
 		}
 	}()
 

@@ -95,15 +95,19 @@ func (s *Service) GetAllSettings(ctx context.Context) (map[string]interface{}, e
 		var value json.RawMessage
 
 		if err := rows.Scan(&key, &value); err != nil {
-			continue
+			return nil, fmt.Errorf("failed to scan setting row: %w", err)
 		}
 
 		var valueObj interface{}
 		if err := json.Unmarshal(value, &valueObj); err != nil {
-			continue
+			return nil, fmt.Errorf("failed to unmarshal setting %q: %w", key, err)
 		}
 
 		settings[key] = valueObj
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating settings: %w", err)
 	}
 
 	return settings, nil
