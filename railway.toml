@@ -1,10 +1,11 @@
-# Railway Configuration for Bantuaku Backend
-# This is a monorepo - set Root Directory to "backend" in Railway Dashboard
+# Railway Configuration for Bantuaku (All-in-One)
+# https://docs.railway.com/guides/config-as-code
+# Runs: Backend + Frontend + Forecasting in single container
 
 [build]
 builder = "dockerfile"
 dockerfilePath = "Dockerfile"
-watchPatterns = ["**"]
+watchPatterns = ["backend/**", "frontend/**", "services/forecasting/**"]
 
 [deploy]
 healthcheckPath = "/api/v1/health"
