@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/bantuaku/backend/middleware"
@@ -60,8 +61,33 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.db.Pool().Query(r.Context(), query, args...)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to fetch products")
-		return
+		// Backward compatibility for older schemas that still use store_id/product_name
+		errStr := err.Error()
+		if strings.Contains(errStr, "column") && (strings.Contains(errStr, "company_id") || strings.Contains(errStr, "name")) {
+			query = `
+				SELECT id, store_id AS company_id, product_name AS name, sku, category, unit_price, cost, created_at, updated_at
+				FROM products 
+				WHERE store_id = $1
+				ORDER BY product_name
+			`
+			if category != "" {
+				query = `
+					SELECT id, store_id AS company_id, product_name AS name, sku, category, unit_price, cost, created_at, updated_at
+					FROM products 
+					WHERE store_id = $1 AND category = $2
+					ORDER BY product_name
+				`
+				args = []interface{}{companyID, category}
+			} else {
+				args = []interface{}{companyID}
+			}
+
+			rows, err = h.db.Pool().Query(r.Context(), query, args...)
+		}
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "Failed to fetch products")
+			return
+		}
 	}
 	defer rows.Close()
 

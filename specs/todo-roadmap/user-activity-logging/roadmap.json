@@ -1,0 +1,64 @@
+{
+  "project": "user-activity-logging",
+  "title": "User Activity Logging & Token Usage Observability",
+  "status": "planned",
+  "epics": [
+    {
+      "id": "epic-1-data-model",
+      "title": "Data Model & Instrumentation Plan",
+      "status": "todo",
+      "tasks": [
+        "Define activity event schema (chat/upload/RAG/token) with indexes",
+        "Define aggregates (daily/weekly/monthly) and retention/TTL",
+        "Document PII redaction rules and payload shapes"
+      ]
+    },
+    {
+      "id": "epic-2-backend-logging",
+      "title": "Backend Logging & Token Metering",
+      "status": "todo",
+      "tasks": [
+        "Emit activity events (chat, upload, RAG) with user_id + timestamps",
+        "Implement token metering per request; persist token_usage rows",
+        "Add aggregation jobs for activity and token usage (daily/weekly/monthly)",
+        "Expose admin APIs for activity list + filters and token usage summaries"
+      ]
+    },
+    {
+      "id": "epic-3-admin-dashboard",
+      "title": "Admin Dashboard (Activity & Token)",
+      "status": "todo",
+      "tasks": [
+        "Admin UI pages for activity logs with filters and pagination",
+        "Admin UI token usage views (per-request and aggregates)",
+        "System-wide stats widgets/charts"
+      ]
+    },
+    {
+      "id": "epic-4-realtime",
+      "title": "Real-Time Monitoring",
+      "status": "todo",
+      "tasks": [
+        "Websocket/SSE feed for live counters",
+        "Redis/in-memory fan-out with rate limiting/backpressure",
+        "Admin UI live widgets"
+      ]
+    },
+    {
+      "id": "epic-5-qa-ops",
+      "title": "QA, Ops, and Docs",
+      "status": "todo",
+      "tasks": [
+        "Load/soak test ingestion path; ensure non-blocking logging",
+        "Alerting for ingestion/queue failures",
+        "Documentation for APIs, env vars, dashboards, retention"
+      ]
+    }
+  ],
+  "success_metrics": [
+    "100% of chat/upload/RAG requests emit activity events with user_id + timestamp",
+    "Token usage recorded per request; aggregates available per user daily/weekly/monthly",
+    "Admin dashboards respond <300ms for recent filtered queries; real-time widgets update within 2s"
+  ]
+}
+

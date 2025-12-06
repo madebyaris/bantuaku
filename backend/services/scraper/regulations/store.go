@@ -7,17 +7,14 @@ import (
 	"fmt"
 
 	"github.com/bantuaku/backend/logger"
-	"github.com/bantuaku/backend/services/embedding"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/pgvector/pgvector-go"
 )
 
-// Store handles database persistence with deduplication and embeddings
+// Store handles database persistence with deduplication
 type Store struct {
-	pool     *pgxpool.Pool
-	embedder embedding.Embedder
-	log      logger.Logger
+	pool *pgxpool.Pool
+	log  logger.Logger
 }
 
 // NewStore creates a new store instance
@@ -25,15 +22,6 @@ func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{
 		pool: pool,
 		log:  *logger.Default(),
-	}
-}
-
-// NewStoreWithEmbedder creates a store with embedding support
-func NewStoreWithEmbedder(pool *pgxpool.Pool, embedder embedding.Embedder) *Store {
-	return &Store{
-		pool:     pool,
-		embedder: embedder,
-		log:      *logger.Default(),
 	}
 }
 
@@ -166,129 +154,3 @@ func (s *Store) IsRegulationProcessed(ctx context.Context, regulationID string) 
 	return count > 0, nil
 }
 
-// StoreProcessedRegulation stores a processed regulation with content, chunks, and embeddings
-func (s *Store) StoreProcessedRegulation(ctx context.Context, processed *ProcessedRegulation) (string, error) {
-	s.log.Info("Storing processed regulation", "title", processed.Title, "category", processed.Category)
-
-	// Generate hash for deduplication
-	hash := s.generateHashFromProcessed(processed)
-
-	// Check if exists
-	var existingID string
-	err := s.pool.QueryRow(ctx, "SELECT id FROM regulations WHERE hash = $1", hash).Scan(&existingID)
-	if err == nil {
-		s.log.Info("Regulation already exists, updating", "id", existingID)
-		// Update existing
-		_, err = s.pool.Exec(ctx,
-			`UPDATE regulations 
-			 SET title = $1, summary = $2, category = $3, source_url = $4, pdf_url = $5,
-			     version = version + 1, updated_at = NOW()
-			 WHERE id = $6`,
-			processed.Title, processed.Summary, processed.Category,
-			processed.SourceURL, processed.PDFURL, existingID,
-		)
-		if err != nil {
-			return "", fmt.Errorf("failed to update regulation: %w", err)
-		}
-		return existingID, nil
-	}
-
-	// Create new regulation
-	id := uuid.New().String()
-	_, err = s.pool.Exec(ctx,
-		`INSERT INTO regulations 
-		 (id, title, summary, category, status, source_url, pdf_url, hash, version, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, 1, NOW(), NOW())`,
-		id, processed.Title, processed.Summary, processed.Category,
-		processed.SourceURL, processed.PDFURL, hash,
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to insert regulation: %w", err)
-	}
-
-	// Store full text as chunks with embeddings
-	if processed.FullText != "" {
-		if err := s.storeContentWithEmbeddings(ctx, id, processed.FullText); err != nil {
-			s.log.Warn("Failed to store chunks with embeddings", "error", err)
-			// Continue anyway - regulation metadata is saved
-		}
-	}
-
-	s.log.Info("Stored new regulation", "id", id, "title", processed.Title)
-	return id, nil
-}
-
-// storeContentWithEmbeddings chunks content and stores with embeddings
-func (s *Store) storeContentWithEmbeddings(ctx context.Context, regulationID, content string) error {
-	// Chunk the content
-	chunker := NewChunker()
-	chunks := chunker.ChunkText(content)
-
-	s.log.Debug("Created chunks", "count", len(chunks), "regulation_id", regulationID)
-
-	for _, chunk := range chunks {
-		// Store chunk
-		chunkID := uuid.New().String()
-		_, err := s.pool.Exec(ctx,
-			`INSERT INTO regulation_chunks (id, regulation_id, content, chunk_index, created_at)
-			 VALUES ($1, $2, $3, $4, NOW())`,
-			chunkID, regulationID, chunk.Text, chunk.Index,
-		)
-		if err != nil {
-			s.log.Warn("Failed to store chunk", "error", err)
-			continue
-		}
-
-		// Generate and store embedding if embedder is available
-		if s.embedder != nil {
-			if err := s.storeChunkEmbedding(ctx, chunkID, chunk.Text); err != nil {
-				s.log.Warn("Failed to store embedding", "chunk_id", chunkID, "error", err)
-				// Continue - chunk is saved even without embedding
-			}
-		}
-	}
-
-	return nil
-}
-
-// storeChunkEmbedding generates and stores embedding for a chunk
-func (s *Store) storeChunkEmbedding(ctx context.Context, chunkID, text string) error {
-	// Generate embedding
-	embeddingVec, err := s.embedder.Embed(ctx, text)
-	if err != nil {
-		return fmt.Errorf("failed to generate embedding: %w", err)
-	}
-
-	// Convert to pgvector
-	vector := pgvector.NewVector(embeddingVec)
-
-	// Store in embeddings table
-	embeddingID := uuid.New().String()
-	_, err = s.pool.Exec(ctx,
-		`INSERT INTO embeddings (id, entity_type, entity_id, embedding, provider, model_version, created_at)
-		 VALUES ($1, 'regulation_chunk', $2, $3, 'openrouter', 'v1', NOW())`,
-		embeddingID, chunkID, vector,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to store embedding: %w", err)
-	}
-
-	// Link in regulation_embeddings
-	_, err = s.pool.Exec(ctx,
-		`INSERT INTO regulation_embeddings (id, chunk_id, embedding_id, created_at)
-		 VALUES ($1, $2, $3, NOW())`,
-		uuid.New().String(), chunkID, embeddingID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to link embedding: %w", err)
-	}
-
-	return nil
-}
-
-// generateHashFromProcessed generates hash for deduplication
-func (s *Store) generateHashFromProcessed(processed *ProcessedRegulation) string {
-	hashInput := fmt.Sprintf("%s|%s|%s", processed.Title, processed.SourceURL, processed.Category)
-	hash := sha256.Sum256([]byte(hashInput))
-	return hex.EncodeToString(hash[:])
-}

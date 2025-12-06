@@ -51,8 +51,7 @@ Instruksi:
 2. Gunakan informasi dari konteks peraturan yang diberikan untuk menjawab pertanyaan
 3. Jika informasi tidak tersedia dalam konteks, katakan dengan jujur bahwa kamu tidak memiliki informasi tersebut
 4. Selalu sertakan referensi ke peraturan yang digunakan (nomor peraturan, tahun)
-5. Berikan jawaban yang praktis dan dapat ditindaklanjuti
-6. Jika user menanyakan tentang data perusahaan atau produk, gunakan tools yang tersedia untuk mengumpulkan atau menampilkan data`
+5. Berikan jawaban yang praktis dan dapat ditindaklanjuti`
 
 	userPrompt := userQuery
 
@@ -83,14 +82,14 @@ func ExtractCitations(chunks []embedding.RetrievedChunk) []Citation {
 		seen[key] = true
 
 		citation := Citation{
-			Title:            chunk.RegulationTitle,
+			Title:           chunk.RegulationTitle,
 			RegulationNumber: chunk.RegulationNumber,
-			Year:             chunk.Year,
-			Category:         chunk.Category,
-			SourceURL:        chunk.SourceURL,
-			PDFURL:           chunk.PDFURL,
-			SectionNumber:    chunk.SectionNumber,
-			SectionTitle:     chunk.SectionTitle,
+			Year:            chunk.Year,
+			Category:       chunk.Category,
+			SourceURL:      chunk.SourceURL,
+			PDFURL:         chunk.PDFURL,
+			SectionNumber:  chunk.SectionNumber,
+			SectionTitle:   chunk.SectionTitle,
 		}
 		citations = append(citations, citation)
 	}
@@ -109,3 +108,4 @@ type Citation struct {
 	SectionNumber    *string `json:"section_number,omitempty"`
 	SectionTitle     *string `json:"section_title,omitempty"`
 }
+

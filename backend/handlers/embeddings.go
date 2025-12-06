@@ -1,10 +1,8 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/bantuaku/backend/errors"
 	"github.com/bantuaku/backend/logger"
@@ -15,10 +13,10 @@ import (
 func (h *Handler) IndexChunks(w http.ResponseWriter, r *http.Request) {
 	log := logger.With("request_id", r.Context().Value("request_id"))
 
-	// Get limit query parameter (default: 100, max: 10000)
+	// Get limit query parameter (default: 100)
 	limit := 100
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 10000 {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
 			limit = parsed
 		}
 	}
@@ -34,18 +32,14 @@ func (h *Handler) IndexChunks(w http.ResponseWriter, r *http.Request) {
 	// Create indexer
 	indexer := embedding.NewIndexer(h.db.Pool(), embedder)
 
-	// Run indexing in goroutine with detached context (request context will be cancelled)
+	// Run indexing in goroutine
 	go func() {
-		// Create a new logger for the goroutine without request-scoped values
-		bgLog := logger.With("job", "index_chunks", "limit", limit)
-		// Use background context with timeout since request context will be cancelled
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-		defer cancel()
+		ctx := r.Context()
 		count, err := indexer.IndexChunks(ctx, limit)
 		if err != nil {
-			bgLog.Error("Indexing failed", "error", err)
+			log.Error("Indexing failed", "error", err)
 		} else {
-			bgLog.Info("Indexing completed", "indexed", count)
+			log.Info("Indexing completed", "indexed", count)
 		}
 	}()
 
@@ -118,3 +112,4 @@ func (h *Handler) SearchRegulations(w http.ResponseWriter, r *http.Request) {
 		"count":   len(chunks),
 	})
 }
+

@@ -18,7 +18,6 @@ const (
 	RequestIDKey contextKey = "request_id"
 	UserIDKey    contextKey = "user_id"
 	StoreIDKey   contextKey = "store_id"
-	CompanyIDKey contextKey = "company_id"
 	RoleKey      contextKey = "role"
 )
 
@@ -342,11 +341,7 @@ func Auth(jwtSecret string, next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		userID, _ := claims["user_id"].(string)
-		companyID, _ := claims["company_id"].(string)
 		storeID, _ := claims["store_id"].(string)
-		if companyID == "" {
-			companyID = storeID
-		}
 		role, _ := claims["role"].(string)
 		if role == "" {
 			role = "user" // Default role
@@ -355,14 +350,12 @@ func Auth(jwtSecret string, next http.HandlerFunc) http.HandlerFunc {
 		ctx := r.Context()
 		ctx = context.WithValue(ctx, UserIDKey, userID)
 		ctx = context.WithValue(ctx, StoreIDKey, storeID)
-		ctx = context.WithValue(ctx, CompanyIDKey, companyID)
 		ctx = context.WithValue(ctx, RoleKey, role)
 
 		log.Debug(
 			"Authentication successful",
 			"user_id", userID,
 			"store_id", storeID,
-			"company_id", companyID,
 		)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -382,10 +375,8 @@ func GetStoreID(ctx context.Context) string {
 }
 
 // GetCompanyID extracts company ID from context (same as store_id for now)
+// TODO: Update JWT to use company_id instead of store_id
 func GetCompanyID(ctx context.Context) string {
-	companyID, _ := ctx.Value(CompanyIDKey).(string)
-	if companyID != "" {
-		return companyID
-	}
+	// For now, store_id in JWT is actually company_id after migration
 	return GetStoreID(ctx)
 }

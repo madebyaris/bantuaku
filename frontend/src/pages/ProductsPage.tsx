@@ -1,60 +1,60 @@
-import { useEffect, useState } from 'react'
-import { Plus, Search, Loader2, TrendingUp, Package } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { api, Product, ForecastResponse } from '@/lib/api'
-import { formatCurrency, cn, getRiskColor } from '@/lib/utils'
-import { toast } from '@/components/ui/toaster'
+import { useEffect, useState } from "react";
+import { Plus, Search, Loader2, TrendingUp, Package } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { api, Product, ForecastResponse } from "@/lib/api";
+import { formatCurrency, cn, getRiskColor } from "@/lib/utils";
+import { toast } from "@/components/ui/toaster";
 
 export function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
-  const [forecast, setForecast] = useState<ForecastResponse | null>(null)
-  const [loadingForecast, setLoadingForecast] = useState(false)
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [forecast, setForecast] = useState<ForecastResponse | null>(null);
+  const [loadingForecast, setLoadingForecast] = useState(false);
 
   useEffect(() => {
-    loadProducts()
-  }, [])
+    loadProducts();
+  }, []);
 
   async function loadProducts() {
     try {
-      const data = await api.products.list()
-      setProducts(data)
+      const data = await api.products.list();
+      setProducts(data);
     } catch (err) {
-      toast({ title: 'Gagal memuat produk', variant: 'destructive' })
+      toast({ title: "Gagal memuat produk", variant: "destructive" });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
   async function handleSelectProduct(product: Product) {
-    setSelectedProduct(product)
-    setLoadingForecast(true)
+    setSelectedProduct(product);
+    setLoadingForecast(true);
     try {
-      const forecastData = await api.forecasts.get(product.id)
-      setForecast(forecastData)
+      const forecastData = await api.forecasts.get(product.id);
+      setForecast(forecastData);
     } catch {
-      setForecast(null)
+      setForecast(null);
     } finally {
-      setLoadingForecast(false)
+      setLoadingForecast(false);
     }
   }
 
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  );
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
       </div>
-    )
+    );
   }
 
   return (
@@ -84,7 +84,9 @@ export function ProductsPage() {
               <CardContent className="py-12 text-center">
                 <Package className="w-12 h-12 mx-auto text-slate-300 mb-4" />
                 <p className="text-slate-500">
-                  {searchTerm ? 'Tidak ada produk ditemukan' : 'Belum ada produk'}
+                  {searchTerm
+                    ? "Tidak ada produk ditemukan"
+                    : "Belum ada produk"}
                 </p>
                 <Button className="mt-4" onClick={() => setShowAddModal(true)}>
                   Tambah Produk Pertama
@@ -96,8 +98,8 @@ export function ProductsPage() {
               <Card
                 key={product.id}
                 className={cn(
-                  'cursor-pointer transition-all hover:shadow-md',
-                  selectedProduct?.id === product.id && 'ring-2 ring-purple-500'
+                  "cursor-pointer transition-all hover:shadow-md",
+                  selectedProduct?.id === product.id && "ring-2 ring-purple-500"
                 )}
                 onClick={() => handleSelectProduct(product)}
               >
@@ -148,7 +150,9 @@ export function ProductsPage() {
                   {selectedProduct.category && (
                     <div>
                       <Label className="text-slate-500">Kategori</Label>
-                      <p className="font-semibold">{selectedProduct.category}</p>
+                      <p className="font-semibold">
+                        {selectedProduct.category}
+                      </p>
                     </div>
                   )}
                 </CardContent>
@@ -181,10 +185,11 @@ export function ProductsPage() {
                         </p>
                       </div>
 
-
                       <div className="text-xs text-slate-500">
-                        Algoritma: {forecast.algorithm} • Diperbarui:{' '}
-                        {new Date(forecast.generated_at).toLocaleString('id-ID')}
+                        Algoritma: {forecast.algorithm} • Diperbarui:{" "}
+                        {new Date(forecast.generated_at).toLocaleString(
+                          "id-ID"
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -212,34 +217,34 @@ export function ProductsPage() {
         <AddProductModal
           onClose={() => setShowAddModal(false)}
           onSuccess={() => {
-            setShowAddModal(false)
-            loadProducts()
+            setShowAddModal(false);
+            loadProducts();
           }}
         />
       )}
     </div>
-  )
+  );
 }
 
 function AddProductModal({
   onClose,
   onSuccess,
 }: {
-  onClose: () => void
-  onSuccess: () => void
+  onClose: () => void;
+  onSuccess: () => void;
 }) {
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    product_name: '',
-    sku: '',
-    category: '',
-    unit_price: '',
-    cost: '',
-  })
+    product_name: "",
+    sku: "",
+    category: "",
+    unit_price: "",
+    cost: "",
+  });
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
+    e.preventDefault();
+    setLoading(true);
 
     try {
       await api.products.create({
@@ -248,17 +253,17 @@ function AddProductModal({
         category: form.category || undefined,
         unit_price: parseFloat(form.unit_price) || 0,
         cost: parseFloat(form.cost) || undefined,
-      })
-      toast({ title: 'Produk berhasil ditambahkan', variant: 'success' })
-      onSuccess()
+      });
+      toast({ title: "Produk berhasil ditambahkan", variant: "success" });
+      onSuccess();
     } catch (err) {
       toast({
-        title: 'Gagal menambah produk',
-        description: err instanceof Error ? err.message : 'Terjadi kesalahan',
-        variant: 'destructive',
-      })
+        title: "Gagal menambah produk",
+        description: err instanceof Error ? err.message : "Terjadi kesalahan",
+        variant: "destructive",
+      });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -274,7 +279,9 @@ function AddProductModal({
               <Label>Nama Produk *</Label>
               <Input
                 value={form.product_name}
-                onChange={(e) => setForm({ ...form, product_name: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, product_name: e.target.value })
+                }
                 placeholder="Kopi Arabica 250g"
                 required
               />
@@ -292,7 +299,9 @@ function AddProductModal({
                 <Label>Kategori</Label>
                 <Input
                   value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, category: e.target.value })
+                  }
                   placeholder="Minuman"
                 />
               </div>
@@ -302,22 +311,33 @@ function AddProductModal({
               <Input
                 type="number"
                 value={form.unit_price}
-                onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, unit_price: e.target.value })
+                }
                 placeholder="85000"
                 required
               />
             </div>
             <div className="flex gap-3 pt-4">
-              <Button type="button" variant="outline" className="flex-1" onClick={onClose}>
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={onClose}
+              >
                 Batal
               </Button>
               <Button type="submit" className="flex-1" disabled={loading}>
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Simpan'}
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Simpan"
+                )}
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

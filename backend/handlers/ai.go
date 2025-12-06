@@ -18,9 +18,9 @@ import (
 
 // AIAnalyze handles AI analysis questions
 func (h *Handler) AIAnalyze(w http.ResponseWriter, r *http.Request) {
-	companyID := middleware.GetCompanyID(r.Context())
-	if companyID == "" {
-		respondError(w, http.StatusUnauthorized, "Company not found in context")
+	storeID := middleware.GetStoreID(r.Context())
+	if storeID == "" {
+		respondError(w, http.StatusUnauthorized, "Store not found in context")
 		return
 	}
 
@@ -36,7 +36,7 @@ func (h *Handler) AIAnalyze(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check cache
-	cacheKey := fmt.Sprintf("ai:%s:%s", companyID, hashQuestion(req.Question))
+	cacheKey := fmt.Sprintf("ai:%s:%s", storeID, hashQuestion(req.Question))
 	cached, err := h.redis.Get(r.Context(), cacheKey)
 	if err == nil && cached != "" {
 		var response models.AIAnalyzeResponse
@@ -48,7 +48,7 @@ func (h *Handler) AIAnalyze(w http.ResponseWriter, r *http.Request) {
 
 	// Gather context data
 	ctx := r.Context()
-	storeContext := h.gatherStoreContext(ctx, companyID)
+	storeContext := h.gatherStoreContext(ctx, storeID)
 
 	// Build prompt
 	systemPrompt := buildSystemPrompt()
@@ -113,14 +113,14 @@ type ProductSummary struct {
 	Forecast30d int
 }
 
-func (h *Handler) gatherStoreContext(ctx context.Context, companyID string) StoreContext {
+func (h *Handler) gatherStoreContext(ctx context.Context, storeID string) StoreContext {
 	sc := StoreContext{}
 
 	// Get store name
-	h.db.Pool().QueryRow(ctx, `SELECT name FROM companies WHERE id = $1`, companyID).Scan(&sc.StoreName)
+	h.db.Pool().QueryRow(ctx, `SELECT name FROM companies WHERE id = $1`, storeID).Scan(&sc.StoreName)
 
 	// Get total products
-	h.db.Pool().QueryRow(ctx, `SELECT COUNT(*) FROM products WHERE company_id = $1`, companyID).Scan(&sc.TotalProducts)
+	h.db.Pool().QueryRow(ctx, `SELECT COUNT(*) FROM products WHERE company_id = $1`, storeID).Scan(&sc.TotalProducts)
 
 	// Get top products with sales
 	rows2, _ := h.db.Pool().Query(ctx, `
@@ -131,7 +131,7 @@ func (h *Handler) gatherStoreContext(ctx context.Context, companyID string) Stor
 		GROUP BY p.id, p.name
 		ORDER BY sales DESC
 		LIMIT 5
-	`, companyID, time.Now().AddDate(0, 0, -30))
+	`, storeID, time.Now().AddDate(0, 0, -30))
 	if rows2 != nil {
 		defer rows2.Close()
 		for rows2.Next() {
@@ -148,7 +148,7 @@ func (h *Handler) gatherStoreContext(ctx context.Context, companyID string) Stor
 		SELECT COALESCE(SUM(quantity * price), 0)
 		FROM sales_history
 		WHERE company_id = $1 AND sale_date >= $2
-	`, companyID, time.Now().AddDate(0, 0, -30)).Scan(&sc.RecentRevenue)
+	`, storeID, time.Now().AddDate(0, 0, -30)).Scan(&sc.RecentRevenue)
 
 	return sc
 }

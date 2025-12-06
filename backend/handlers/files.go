@@ -37,6 +37,7 @@ type UploadFileResponse struct {
 func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	companyID := middleware.GetCompanyID(ctx)
+	userID := middleware.GetUserID(ctx)
 
 	// Check upload usage limit
 	usageService := usage.NewService(h.db)
@@ -164,6 +165,15 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		// For now, mark as uploaded
 		response.Status = "uploaded"
 	}
+
+	// Log upload activity (avoid storing filename; keep ext/size)
+	h.auditLogger.LogResourceAction(ctx, r, "activity.file.uploaded", "file_upload", fileUploadID, map[string]interface{}{
+		"user_id":    userID,
+		"company_id": companyID,
+		"size_bytes": header.Size,
+		"mime_type":  response.MimeType,
+		"ext":        ext,
+	})
 
 	h.respondJSON(w, http.StatusOK, response)
 }

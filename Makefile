@@ -9,9 +9,9 @@ else
     # Unix/Linux/macOS - try docker-compose first, fallback to docker compose
     DOCKER_COMPOSE := $(shell command -v docker-compose 2>/dev/null || echo "docker compose")
     KILL_PORTS_CMD := @-lsof -ti :3000 | xargs kill -9 2>/dev/null || true; \
-                      -lsof -ti :8080 | xargs kill -9 2>/dev/null || true; \
-                      -lsof -ti :5432 | xargs kill -9 2>/dev/null || true; \
-                      -lsof -ti :6379 | xargs kill -9 2>/dev/null || true
+	                  -lsof -ti :8080 | xargs kill -9 2>/dev/null || true; \
+	                  -lsof -ti :5432 | xargs kill -9 2>/dev/null || true; \
+	                  -lsof -ti :6379 | xargs kill -9 2>/dev/null || true
 endif
 
 # Development
@@ -25,8 +25,7 @@ kill-ports:
 	@echo "Ports cleared"
 
 dev-backend:
-	@which air > /dev/null || (echo "Installing air for hot reload..." && go install github.com/air-verse/air@latest)
-	cd backend && air
+	cd backend && go run main.go
 
 dev-frontend:
 	cd frontend && npm run dev
@@ -65,7 +64,7 @@ seed:
 
 seed-admin:
 	@echo "Creating super admin user..."
-	$(DOCKER_COMPOSE) exec -T db psql -U bantuaku -d bantuaku_dev < scripts/seed_admin.sql
+	$(DOCKER_COMPOSE) exec -T db psql -U bantuaku -d bantuaku_dev -c "INSERT INTO users (id, email, password_hash, role, created_at) VALUES ('super-admin-001', 'admin@bantuaku.id', '\$$2a\$$10\$$E/KmS9sT76xcwUeji.gEDeikxK99miVSTZ9XCLrzcLYayVzvMT1JK', 'super_admin', NOW()) ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, role = 'super_admin';"
 	@echo "Super admin created: admin@bantuaku.id / demo123"
 
 # Cleanup

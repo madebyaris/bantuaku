@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -81,7 +82,9 @@ func (h *AdminHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	var logs []AuditLog
 	for rows.Next() {
 		var log AuditLog
-		var userID, companyID, resourceType, resourceID, ipAddress, userAgent *string
+		var userID, companyID, resourceType, resourceID sql.NullString
+		var ipAddress sql.NullString
+		var userAgent sql.NullString
 		var metadataJSON []byte
 
 		if err := rows.Scan(
@@ -93,15 +96,23 @@ func (h *AdminHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		log.UserID = userID
-		log.CompanyID = companyID
-		log.ResourceType = resourceType
-		log.ResourceID = resourceID
-		if ipAddress != nil {
-			log.IPAddress = ipAddress
+		if userID.Valid {
+			log.UserID = &userID.String
 		}
-		if userAgent != nil {
-			log.UserAgent = userAgent
+		if companyID.Valid {
+			log.CompanyID = &companyID.String
+		}
+		if resourceType.Valid {
+			log.ResourceType = &resourceType.String
+		}
+		if resourceID.Valid {
+			log.ResourceID = &resourceID.String
+		}
+		if ipAddress.Valid {
+			log.IPAddress = &ipAddress.String
+		}
+		if userAgent.Valid {
+			log.UserAgent = &userAgent.String
 		}
 
 		if len(metadataJSON) > 0 {
