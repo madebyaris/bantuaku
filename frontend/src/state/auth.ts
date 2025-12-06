@@ -16,6 +16,7 @@ interface AuthState {
     plan: string
   }) => void
   logout: () => void
+  updateCompanyName: (name: string) => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -45,6 +46,8 @@ export const useAuthStore = create<AuthState>()(
           plan: null,
           isAuthenticated: false,
         }),
+      updateCompanyName: (name) =>
+        set({ companyName: name }),
     }),
     {
       name: 'bantuaku-auth',

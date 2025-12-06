@@ -12,6 +12,7 @@ describe('Auth Store', () => {
       isAuthenticated: false,
       login: useAuthStore.getState().login,
       logout: useAuthStore.getState().logout,
+      updateCompanyName: useAuthStore.getState().updateCompanyName,
     })
   })
 
@@ -65,5 +66,24 @@ describe('Auth Store', () => {
     expect(result.current.companyId).toBeNull()
     expect(result.current.companyName).toBeNull()
     expect(result.current.plan).toBeNull()
+  })
+
+  it('updates company name', () => {
+    const { result } = renderHook(() => useAuthStore())
+    act(() => {
+      result.current.login({
+        token: 't',
+        user_id: 'u',
+        company_id: 'c',
+        company_name: 'Old Company',
+        plan: 'free',
+      })
+    })
+
+    act(() => {
+      result.current.updateCompanyName('New Company')
+    })
+
+    expect(result.current.companyName).toBe('New Company')
   })
 })

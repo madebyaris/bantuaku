@@ -139,8 +139,7 @@ func (e *Executor) handleUpdateCompanyInfo(ctx context.Context, companyID string
 			business_model = COALESCE(NULLIF($3, ''), business_model),
 			city = COALESCE(NULLIF($4, ''), city),
 			location_region = COALESCE(NULLIF($5, ''), location_region),
-			description = COALESCE(NULLIF($6, ''), description),
-			updated_at = NOW()
+			description = COALESCE(NULLIF($6, ''), description)
 		WHERE id = $1
 	`, companyID, industry, businessModel, city, locationRegion, description)
 
@@ -242,8 +241,7 @@ func (e *Executor) handleUpdateCompanySocialMedia(ctx context.Context, companyID
 	// Update database
 	_, err = e.db.Pool().Exec(ctx, `
 		UPDATE companies 
-		SET social_media_handles = $2,
-		    updated_at = NOW()
+		SET social_media_handles = $2
 		WHERE id = $1
 	`, companyID, string(handlesJSON))
 

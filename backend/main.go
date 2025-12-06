@@ -15,7 +15,12 @@ import (
 	"github.com/bantuaku/backend/middleware"
 	"github.com/bantuaku/backend/services/audit"
 	"github.com/bantuaku/backend/services/billing"
+	"github.com/bantuaku/backend/services/chat"
+	"github.com/bantuaku/backend/services/forecast"
+	"github.com/bantuaku/backend/services/prediction"
+	"github.com/bantuaku/backend/services/settings"
 	"github.com/bantuaku/backend/services/storage"
+	"github.com/bantuaku/backend/services/usage"
 )
 
 func main() {
@@ -60,6 +65,32 @@ func main() {
 	// Initialize audit logger
 	auditLogger := audit.NewLogger(db)
 	log.Info("Audit logger initialized")
+
+	// Initialize settings service for AI provider configuration
+	settingsService := settings.NewService(db)
+
+	// Initialize chat provider
+	chatProvider, err := chat.NewChatProvider(context.Background(), cfg, settingsService)
+	if err != nil {
+		log.Warn("Failed to initialize chat provider for predictions", "error", err)
+	}
+
+	// Initialize prediction service and handler
+	var predictionHandler *handlers.PredictionHandler
+	if chatProvider != nil {
+		// Get AI model from settings
+		chatModel := "x-ai/grok-4-fast" // Default model
+		if modelSetting, err := settingsService.GetSetting(context.Background(), "ai_model"); err == nil && modelSetting != "" {
+			chatModel = modelSetting
+		}
+
+		forecastAdapter := forecast.NewAdapter(cfg.ForecastingServiceURL)
+		forecastService := forecast.NewService(forecastAdapter, db.Pool())
+		usageService := usage.NewService(db)
+		predictionService := prediction.NewService(db.Pool(), chatProvider, forecastService, usageService, chatModel)
+		predictionHandler = handlers.NewPredictionHandler(predictionService)
+		log.Info("Prediction service initialized")
+	}
 
 	// Initialize Stripe billing service (if configured)
 	var billingHandler *handlers.BillingHandler
@@ -145,6 +176,14 @@ func main() {
 
 	// Dashboard
 	mux.HandleFunc("GET /api/v1/dashboard/summary", middleware.Auth(cfg.JWTSecret, h.DashboardSummary))
+
+	// Prediction (Background Research Jobs)
+	if predictionHandler != nil {
+		mux.HandleFunc("GET /api/v1/prediction/completeness", middleware.Auth(cfg.JWTSecret, predictionHandler.CheckCompleteness))
+		mux.HandleFunc("POST /api/v1/prediction/start", middleware.Auth(cfg.JWTSecret, predictionHandler.StartPrediction))
+		mux.HandleFunc("GET /api/v1/prediction/status", middleware.Auth(cfg.JWTSecret, predictionHandler.GetStatus))
+		mux.HandleFunc("GET /api/v1/prediction/results", middleware.Auth(cfg.JWTSecret, predictionHandler.GetLatestResults))
+	}
 
 	// Regulations scraper (admin endpoints) - with rate limiting
 	scrapingRateLimit := middleware.RateLimiter(redis, middleware.DefaultRateLimitConfigs.Scraping)

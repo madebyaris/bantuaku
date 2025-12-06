@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import {
   TrendingUp,
@@ -13,6 +13,9 @@ import {
   Megaphone,
   Scale,
   Upload,
+  Zap,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react'
 import {
   LineChart,
@@ -25,13 +28,35 @@ import {
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { api, DashboardSummary, Sale } from '@/lib/api'
+import { api, DashboardSummary, Sale, PredictionCompleteness, PredictionStatus } from '@/lib/api'
 import { formatCurrency, formatPercentage, cn } from '@/lib/utils'
+import { useAuthStore } from '@/state/auth'
 
 export function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [chartData, setChartData] = useState<Array<{ name: string; sales: number }>>([])
+  const { companyName, updateCompanyName } = useAuthStore()
+  
+  // Prediction state
+  const [completeness, setCompleteness] = useState<PredictionCompleteness | null>(null)
+  const [predictionStatus, setPredictionStatus] = useState<PredictionStatus | null>(null)
+  const [startingPrediction, setStartingPrediction] = useState(false)
+  const [predictionError, setPredictionError] = useState<string | null>(null)
+
+  // Load prediction status
+  const loadPredictionStatus = useCallback(async () => {
+    try {
+      const [completenessData, statusData] = await Promise.all([
+        api.prediction.checkCompleteness(),
+        api.prediction.status(),
+      ])
+      setCompleteness(completenessData)
+      setPredictionStatus(statusData)
+    } catch (err) {
+      console.error('Failed to load prediction status:', err)
+    }
+  }, [])
 
   useEffect(() => {
     async function loadData() {
@@ -42,9 +67,17 @@ export function DashboardPage() {
         ])
         setSummary(summaryData)
         
+        // Sync company name with auth store if it differs
+        if (summaryData.company_name && summaryData.company_name !== companyName) {
+          updateCompanyName(summaryData.company_name)
+        }
+        
         // Process sales data for chart (last 7 days)
         const last7Days = processSalesForChart(salesData)
         setChartData(last7Days)
+        
+        // Load prediction status
+        await loadPredictionStatus()
       } catch (err) {
         console.error('Failed to load dashboard:', err)
       } finally {
@@ -52,7 +85,43 @@ export function DashboardPage() {
       }
     }
     loadData()
-  }, [])
+  }, [companyName, updateCompanyName, loadPredictionStatus])
+
+  // Poll for prediction status while job is active
+  useEffect(() => {
+    if (!predictionStatus?.has_active_job) return
+
+    const interval = setInterval(async () => {
+      try {
+        const status = await api.prediction.status()
+        setPredictionStatus(status)
+        if (!status.has_active_job) {
+          // Job completed, refresh completeness too
+          loadPredictionStatus()
+        }
+      } catch (err) {
+        console.error('Failed to poll prediction status:', err)
+      }
+    }, 5000) // Poll every 5 seconds
+
+    return () => clearInterval(interval)
+  }, [predictionStatus?.has_active_job, loadPredictionStatus])
+
+  // Handle starting a prediction
+  const handleStartPrediction = async () => {
+    setStartingPrediction(true)
+    setPredictionError(null)
+    try {
+      await api.prediction.start()
+      // Refresh status
+      await loadPredictionStatus()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to start prediction'
+      setPredictionError(message)
+    } finally {
+      setStartingPrediction(false)
+    }
+  }
 
   function processSalesForChart(sales: Sale[]): Array<{ name: string; sales: number }> {
     // Get last 7 days
@@ -108,12 +177,12 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      {/* Company Profile Card */}
+      {/* Company Profile Card with Predict It Button */}
       {summary?.company_name && (
         <Card className="hover-card-effect border-white/10 bg-white/5">
           <CardContent className="pt-6">
             <div className="flex items-start justify-between">
-              <div>
+              <div className="flex-1">
                 <h2 className="text-2xl font-bold text-slate-100">{summary.company_name}</h2>
                 {summary.company_industry && (
                   <p className="text-sm text-slate-400 mt-1">{summary.company_industry}</p>
@@ -121,6 +190,76 @@ export function DashboardPage() {
                 {summary.company_location && (
                   <p className="text-sm text-slate-400">{summary.company_location}</p>
                 )}
+                
+                {/* Prediction Status/Button */}
+                <div className="mt-4">
+                  {completeness?.is_complete ? (
+                    <div className="flex items-center gap-3">
+                      {predictionStatus?.has_active_job ? (
+                        <div className="flex items-center gap-2 text-sm text-amber-400">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Menganalisis bisnis Anda...</span>
+                          <span className="text-xs text-slate-500">
+                            ({Object.values(predictionStatus.progress || {}).filter(Boolean).length}/6 selesai)
+                          </span>
+                        </div>
+                      ) : predictionStatus?.status === 'completed' ? (
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span className="text-sm text-emerald-400">Analisis selesai!</span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleStartPrediction}
+                            disabled={startingPrediction}
+                            className="ml-2 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                          >
+                            {startingPrediction ? (
+                              <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                            ) : (
+                              <Zap className="w-4 h-4 mr-1" />
+                            )}
+                            Refresh Prediksi
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          onClick={handleStartPrediction}
+                          disabled={startingPrediction}
+                          className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+                        >
+                          {startingPrediction ? (
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          ) : (
+                            <Zap className="w-4 h-4 mr-2" />
+                          )}
+                          Predict It!
+                        </Button>
+                      )}
+                      {predictionError && (
+                        <div className="flex items-center gap-1 text-sm text-red-400">
+                          <AlertCircle className="w-4 h-4" />
+                          {predictionError}
+                        </div>
+                      )}
+                    </div>
+                  ) : completeness && (
+                    <div className="text-sm text-slate-500">
+                      <span>Lengkapi profil untuk mengaktifkan prediksi: </span>
+                      <span className="text-amber-400">
+                        {completeness.missing?.map(m => {
+                          switch(m) {
+                            case 'industry': return 'industri'
+                            case 'city': return 'lokasi'
+                            case 'products': return 'produk'
+                            case 'social_media': return 'social media'
+                            default: return m
+                          }
+                        }).join(', ')}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
                 <Sparkles className="w-6 h-6 text-emerald-400" />

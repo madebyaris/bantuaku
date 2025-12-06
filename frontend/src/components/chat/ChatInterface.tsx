@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Sparkles, User, Upload } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Send, Loader2, Sparkles, User, Upload, Zap, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useChatStore, ChatMessage } from '@/state/chat'
+import { api, PredictionCompleteness } from '@/lib/api'
 
 interface ChatInterfaceProps {
   isWidget?: boolean
@@ -25,17 +26,40 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
     addMessage,
     setLoading,
     initializeConversation,
-    loadMessages,
   } = useChatStore()
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [initializing, setInitializing] = useState(true)
+  
+  // Prediction CTA state
+  const [completeness, setCompleteness] = useState<PredictionCompleteness | null>(null)
+  const [showPredictCTA, setShowPredictCTA] = useState(false)
+  const [startingPrediction, setStartingPrediction] = useState(false)
+
+  // Check completeness after messages update
+  const checkCompleteness = useCallback(async () => {
+    try {
+      const [compData, statusData] = await Promise.all([
+        api.prediction.checkCompleteness(),
+        api.prediction.status(),
+      ])
+      setCompleteness(compData)
+      // Show CTA if complete and no active job
+      if (compData.is_complete && !statusData.has_active_job) {
+        setShowPredictCTA(true)
+      }
+    } catch (err) {
+      console.error('Failed to check completeness:', err)
+    }
+  }, [])
 
   // Initialize conversation on mount (single continuous chat)
   useEffect(() => {
     const init = async () => {
       try {
         await initializeConversation()
+        // Also check completeness on init
+        await checkCompleteness()
       } catch (err) {
         console.error('Failed to initialize conversation:', err)
       } finally {
@@ -43,7 +67,7 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
       }
     }
     init()
-  }, [initializeConversation])
+  }, [initializeConversation, checkCompleteness])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -72,6 +96,26 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
     }
   }, [])
 
+  // Handle starting prediction
+  const handleStartPrediction = async () => {
+    setStartingPrediction(true)
+    try {
+      await api.prediction.start()
+      setShowPredictCTA(false)
+      // Add system message about prediction starting
+      addMessage({
+        id: Date.now().toString(),
+        role: 'assistant',
+        text: '🚀 Saya mulai menganalisis bisnis Anda! Anda akan menerima notifikasi ketika selesai. Silakan lanjutkan percakapan atau kunjungi Dashboard untuk melihat progress.',
+        timestamp: new Date(),
+      })
+    } catch (err) {
+      console.error('Failed to start prediction:', err)
+    } finally {
+      setStartingPrediction(false)
+    }
+  }
+
   async function sendMessage(text: string) {
     if (!text.trim() || loading || !currentConversationId) return
 
@@ -87,7 +131,6 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
     setLoading(true)
 
     try {
-      const { api } = await import('@/lib/api')
       const response = await api.chat.sendMessage(currentConversationId, text.trim())
       
       const assistantMessage: ChatMessage = {
@@ -99,6 +142,9 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
       }
 
       addMessage(assistantMessage)
+      
+      // Check completeness after each message (AI might have saved data)
+      await checkCompleteness()
     } catch (err) {
       console.error('Failed to send message:', err)
       const errorMessage: ChatMessage = {
@@ -243,6 +289,35 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
         
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Prediction CTA */}
+      {showPredictCTA && completeness?.is_complete && !isWidget && (
+        <div className="mx-4 mb-2 p-4 bg-gradient-to-r from-emerald-500/10 to-emerald-600/10 border border-emerald-500/30 rounded-xl backdrop-blur-md z-20">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-500/20 rounded-lg">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-100">Profil bisnis lengkap!</p>
+                <p className="text-xs text-slate-400">Siap untuk analisis mendalam</p>
+              </div>
+            </div>
+            <Button
+              onClick={handleStartPrediction}
+              disabled={startingPrediction}
+              className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+            >
+              {startingPrediction ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Zap className="w-4 h-4 mr-2" />
+              )}
+              Predict It!
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <div className={cn("border-t border-white/10 bg-black/50 backdrop-blur-xl z-20", isWidget ? "p-3" : "p-4")}>

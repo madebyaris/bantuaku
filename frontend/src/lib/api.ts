@@ -267,6 +267,17 @@ export const api = {
     get: (id: string) => request<CompanyProfile>(`/companies/${id}`),
   },
   
+  prediction: {
+    checkCompleteness: () => request<PredictionCompleteness>('/prediction/completeness'),
+    start: () => request<PredictionStartResponse>('/prediction/start', { method: 'POST' }),
+    status: (jobId?: string) => {
+      const params = new URLSearchParams()
+      if (jobId) params.append('job_id', jobId)
+      return request<PredictionStatus>(`/prediction/status${params.toString() ? '?' + params.toString() : ''}`)
+    },
+    results: () => request<PredictionResults>('/prediction/results'),
+  },
+  
   files: {
     list: (companyId?: string) => {
       const params = new URLSearchParams()
@@ -694,4 +705,55 @@ export interface BillingSubscription {
   stripe_subscription_id?: string
   current_period_start?: string
   current_period_end?: string
+}
+
+// Prediction types
+export interface PredictionCompleteness {
+  is_complete: boolean
+  has_industry: boolean
+  has_city: boolean
+  has_products: boolean
+  has_social: boolean
+  missing?: string[]
+}
+
+export interface PredictionStartResponse {
+  job_id: string
+  status: string
+  message: string
+}
+
+export interface PredictionProgress {
+  keywords: boolean
+  social_media: boolean
+  forecast: boolean
+  market_prediction: boolean
+  marketing: boolean
+  regulations: boolean
+}
+
+export interface PredictionResultData {
+  keywords?: string[]
+  social_media_trends?: Record<string, unknown>
+  forecast_summary?: string
+  market_prediction?: string
+  marketing_recommendations?: string
+  regulations?: string
+}
+
+export interface PredictionStatus {
+  job_id?: string
+  status: string
+  progress?: PredictionProgress
+  results?: PredictionResultData
+  error_message?: string
+  has_active_job: boolean
+}
+
+export interface PredictionResults {
+  has_results: boolean
+  job_id?: string
+  completed_at?: string
+  results?: PredictionResultData
+  message?: string
 }
