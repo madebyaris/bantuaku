@@ -120,7 +120,6 @@ func (c *Client) CreateChatCompletion(ctx context.Context, req ChatCompletionReq
 	// OpenRouter requires HTTP-Referer header for some models
 	httpReq.Header.Set("HTTP-Referer", "https://bantuaku.ai")
 
-
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)

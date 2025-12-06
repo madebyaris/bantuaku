@@ -62,4 +62,3 @@ func (h *Handler) SubmitFeedback(w http.ResponseWriter, r *http.Request) {
 		"created_at":  time.Now(),
 	})
 }
-

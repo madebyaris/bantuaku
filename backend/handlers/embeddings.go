@@ -116,4 +116,3 @@ func (h *Handler) SearchRegulations(w http.ResponseWriter, r *http.Request) {
 		"count":   len(chunks),
 	})
 }
-
