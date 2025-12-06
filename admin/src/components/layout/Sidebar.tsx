@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { X, Shield, Users, CreditCard, FileText, LogOut, Settings, Package } from 'lucide-react'
+import { X, Shield, Users, CreditCard, FileText, LogOut, BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/state/auth'
 
@@ -7,9 +7,8 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Shield },
   { name: 'Users', href: '/users', icon: Users },
   { name: 'Subscriptions', href: '/subscriptions', icon: CreditCard },
-  { name: 'Plans', href: '/plans', icon: Package },
+  { name: 'Activity & Tokens', href: '/activity', icon: BarChart3 },
   { name: 'Audit Logs', href: '/audit-logs', icon: FileText },
-  { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
 interface SidebarProps {

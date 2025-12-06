@@ -12,6 +12,7 @@ import (
 // TokenUsage represents token consumption for a single chat completion
 type TokenUsage struct {
 	ID               string    `json:"id"`
+	UserID           *string   `json:"user_id,omitempty"`
 	CompanyID        string    `json:"company_id"`
 	ConversationID   *string   `json:"conversation_id,omitempty"`
 	MessageID        *string   `json:"message_id,omitempty"`
@@ -67,11 +68,11 @@ func NewService(db *storage.Postgres) *Service {
 func (s *Service) LogTokenUsage(ctx context.Context, usage *TokenUsage) error {
 	_, err := s.db.Pool().Exec(ctx, `
 		INSERT INTO token_usage (
-			id, company_id, conversation_id, message_id,
+			id, user_id, company_id, conversation_id, message_id,
 			model, provider, prompt_tokens, completion_tokens, total_tokens, created_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, usage.ID, usage.CompanyID, usage.ConversationID, usage.MessageID,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`, usage.ID, usage.UserID, usage.CompanyID, usage.ConversationID, usage.MessageID,
 		usage.Model, usage.Provider, usage.PromptTokens, usage.CompletionTokens,
 		usage.TotalTokens, usage.CreatedAt)
 
@@ -79,9 +80,10 @@ func (s *Service) LogTokenUsage(ctx context.Context, usage *TokenUsage) error {
 }
 
 // CreateTokenUsage creates a new token usage record with auto-generated ID
-func (s *Service) CreateTokenUsage(ctx context.Context, companyID string, conversationID, messageID *string, model, provider string, promptTokens, completionTokens, totalTokens int) error {
+func (s *Service) CreateTokenUsage(ctx context.Context, userID *string, companyID string, conversationID, messageID *string, model, provider string, promptTokens, completionTokens, totalTokens int) error {
 	usage := &TokenUsage{
 		ID:               uuid.New().String(),
+		UserID:           userID,
 		CompanyID:        companyID,
 		ConversationID:   conversationID,
 		MessageID:        messageID,
@@ -223,7 +225,7 @@ func (s *Service) GetTokenUsage(ctx context.Context, companyID *string, model *s
 	offset := (page - 1) * limit
 
 	query := `
-		SELECT id, company_id, conversation_id, message_id,
+		SELECT id, user_id, company_id, conversation_id, message_id,
 			model, provider, prompt_tokens, completion_tokens, total_tokens, created_at
 		FROM token_usage
 		WHERE 1=1
@@ -269,7 +271,7 @@ func (s *Service) GetTokenUsage(ctx context.Context, companyID *string, model *s
 		var usage TokenUsage
 		var conversationID, messageID interface{}
 		if err := rows.Scan(
-			&usage.ID, &usage.CompanyID, &conversationID, &messageID,
+			&usage.ID, &usage.UserID, &usage.CompanyID, &conversationID, &messageID,
 			&usage.Model, &usage.Provider,
 			&usage.PromptTokens, &usage.CompletionTokens, &usage.TotalTokens,
 			&usage.CreatedAt,
