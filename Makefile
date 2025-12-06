@@ -1,23 +1,32 @@
-.PHONY: dev dev-backend dev-frontend build up down logs clean migrate seed test test-backend test-frontend test-e2e
+.PHONY: dev dev-backend dev-frontend build up down logs clean migrate seed test test-backend test-frontend test-e2e kill-ports
 
-# Use docker compose (v2) or docker-compose (v1)
-DOCKER_COMPOSE := $(shell command -v docker-compose 2>/dev/null || echo "docker compose")
+# Detect OS and set Docker Compose command
+ifeq ($(OS),Windows_NT)
+    # Windows - use docker compose (v2) directly
+    DOCKER_COMPOSE := docker compose
+    KILL_PORTS_CMD := @echo "Port checking skipped on Windows. Please manually stop processes if needed."
+else
+    # Unix/Linux/macOS - try docker-compose first, fallback to docker compose
+    DOCKER_COMPOSE := $(shell command -v docker-compose 2>/dev/null || echo "docker compose")
+    KILL_PORTS_CMD := @-lsof -ti :3000 | xargs kill -9 2>/dev/null || true; \
+                      -lsof -ti :8080 | xargs kill -9 2>/dev/null || true; \
+                      -lsof -ti :5432 | xargs kill -9 2>/dev/null || true; \
+                      -lsof -ti :6379 | xargs kill -9 2>/dev/null || true
+endif
 
 # Development
 dev: kill-ports
 	$(DOCKER_COMPOSE) up --build
 
-# Kill processes using project ports
+# Kill processes using project ports (optional, skips on Windows)
 kill-ports:
 	@echo "Checking for processes using ports 3000, 8080, 5432, 6379..."
-	@-lsof -ti :3000 | xargs kill -9 2>/dev/null || true
-	@-lsof -ti :8080 | xargs kill -9 2>/dev/null || true
-	@-lsof -ti :5432 | xargs kill -9 2>/dev/null || true
-	@-lsof -ti :6379 | xargs kill -9 2>/dev/null || true
+	$(KILL_PORTS_CMD)
 	@echo "Ports cleared"
 
 dev-backend:
-	cd backend && go run main.go
+	@which air > /dev/null || (echo "Installing air for hot reload..." && go install github.com/air-verse/air@latest)
+	cd backend && air
 
 dev-frontend:
 	cd frontend && npm run dev
@@ -28,6 +37,9 @@ build:
 
 up:
 	$(DOCKER_COMPOSE) up -d
+
+up-build:
+	$(DOCKER_COMPOSE) up --build -d
 
 down:
 	$(DOCKER_COMPOSE) down
@@ -49,7 +61,12 @@ migrate-remove-stock:
 	$(DOCKER_COMPOSE) exec db psql -U bantuaku -d bantuaku_dev -f /docker-entrypoint-initdb.d/003_remove_stock.sql
 
 seed:
-	$(DOCKER_COMPOSE) exec db psql -U bantuaku -d bantuaku_dev -f /docker-entrypoint-initdb.d/002_seed_demo_data.sql
+	$(DOCKER_COMPOSE) exec -T db psql -U bantuaku -d bantuaku_dev -f /docker-entrypoint-initdb.d/010_seed_demo_data.sql
+
+seed-admin:
+	@echo "Creating super admin user..."
+	$(DOCKER_COMPOSE) exec -T db psql -U bantuaku -d bantuaku_dev < scripts/seed_admin.sql
+	@echo "Super admin created: admin@bantuaku.id / demo123"
 
 # Cleanup
 clean:
@@ -101,6 +118,10 @@ test-coverage:
 # Full reset
 reset: clean
 	$(DOCKER_COMPOSE) up --build -d
-	sleep 5
+ifeq ($(OS),Windows_NT)
+	@timeout /t 5 /nobreak >nul 2>&1 || ping 127.0.0.1 -n 6 >nul
+else
+	@sleep 5
+endif
 	$(MAKE) migrate
 	$(MAKE) seed

@@ -18,6 +18,8 @@ const (
 	RequestIDKey contextKey = "request_id"
 	UserIDKey    contextKey = "user_id"
 	StoreIDKey   contextKey = "store_id"
+	CompanyIDKey contextKey = "company_id"
+	RoleKey      contextKey = "role"
 )
 
 // Chain applies multiple middleware to a handler
@@ -240,19 +242,16 @@ func Recover(next http.Handler) http.Handler {
 	})
 }
 
-// RateLimiter implements basic rate limiting
-func RateLimiter(requestsPerMinute int) func(http.Handler) http.Handler {
+// LegacyRateLimiter is deprecated - use RateLimiter from ratelimit.go instead
+// Kept for backward compatibility
+func LegacyRateLimiter(requestsPerMinute int) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// In a real implementation, you would use a proper rate limiting library
-			// like github.com/ulule/limiter or implement token bucket algorithm
-
-			// For now, just log that rate limiting would be applied here
 			requestID, _ := r.Context().Value(RequestIDKey).(string)
 			log := logger.With("request_id", requestID)
 
 			log.Debug(
-				"Rate limiting middleware applied",
+				"Legacy rate limiting middleware applied",
 				"requests_per_minute", requestsPerMinute,
 				"client_ip", getClientIP(r),
 			)
@@ -343,16 +342,27 @@ func Auth(jwtSecret string, next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		userID, _ := claims["user_id"].(string)
+		companyID, _ := claims["company_id"].(string)
 		storeID, _ := claims["store_id"].(string)
+		if companyID == "" {
+			companyID = storeID
+		}
+		role, _ := claims["role"].(string)
+		if role == "" {
+			role = "user" // Default role
+		}
 
 		ctx := r.Context()
 		ctx = context.WithValue(ctx, UserIDKey, userID)
 		ctx = context.WithValue(ctx, StoreIDKey, storeID)
+		ctx = context.WithValue(ctx, CompanyIDKey, companyID)
+		ctx = context.WithValue(ctx, RoleKey, role)
 
 		log.Debug(
 			"Authentication successful",
 			"user_id", userID,
 			"store_id", storeID,
+			"company_id", companyID,
 		)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -372,8 +382,10 @@ func GetStoreID(ctx context.Context) string {
 }
 
 // GetCompanyID extracts company ID from context (same as store_id for now)
-// TODO: Update JWT to use company_id instead of store_id
 func GetCompanyID(ctx context.Context) string {
-	// For now, store_id in JWT is actually company_id after migration
+	companyID, _ := ctx.Value(CompanyIDKey).(string)
+	if companyID != "" {
+		return companyID
+	}
 	return GetStoreID(ctx)
 }

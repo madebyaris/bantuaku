@@ -12,7 +12,7 @@ import (
 
 // GetSentiment returns sentiment data for a product
 func (h *Handler) GetSentiment(w http.ResponseWriter, r *http.Request) {
-	storeID := middleware.GetStoreID(r.Context())
+	companyID := middleware.GetCompanyID(r.Context())
 	productID := r.PathValue("product_id")
 
 	if productID == "" {
@@ -34,8 +34,8 @@ func (h *Handler) GetSentiment(w http.ResponseWriter, r *http.Request) {
 	// Verify product belongs to store
 	var productName string
 	err = h.db.Pool().QueryRow(r.Context(), `
-		SELECT product_name FROM products WHERE id = $1 AND store_id = $2
-	`, productID, storeID).Scan(&productName)
+		SELECT name FROM products WHERE id = $1 AND company_id = $2
+	`, productID, companyID).Scan(&productName)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "Product not found")
 		return
@@ -54,14 +54,14 @@ func (h *Handler) GetSentiment(w http.ResponseWriter, r *http.Request) {
 
 // GetMarketTrends returns market trend data
 func (h *Handler) GetMarketTrends(w http.ResponseWriter, r *http.Request) {
-	storeID := middleware.GetStoreID(r.Context())
-	if storeID == "" {
-		respondError(w, http.StatusUnauthorized, "Store not found in context")
+	companyID := middleware.GetCompanyID(r.Context())
+	if companyID == "" {
+		respondError(w, http.StatusUnauthorized, "Company not found in context")
 		return
 	}
 
 	// Check cache
-	cacheKey := fmt.Sprintf("trends:%s", storeID)
+	cacheKey := fmt.Sprintf("trends:%s", companyID)
 	cached, err := h.redis.Get(r.Context(), cacheKey)
 	if err == nil && cached != "" {
 		var trends []models.MarketTrend
@@ -73,8 +73,8 @@ func (h *Handler) GetMarketTrends(w http.ResponseWriter, r *http.Request) {
 
 	// Get store's product categories
 	rows, err := h.db.Pool().Query(r.Context(), `
-		SELECT DISTINCT category FROM products WHERE store_id = $1 AND category != ''
-	`, storeID)
+		SELECT DISTINCT category FROM products WHERE company_id = $1 AND category != ''
+	`, companyID)
 
 	categories := []string{}
 	if err == nil {
@@ -157,51 +157,57 @@ func generateSampleSentiment(productID, productName string) models.SentimentData
 }
 
 func generateSampleTrends(categories []string) []models.MarketTrend {
+	growth1 := 25.5
+	growth2 := 18.3
+	growth3 := 15.2
+	growth4 := 32.1
+	growth5 := 12.4
 	trends := []models.MarketTrend{
 		{
-			Name:       "Produk Ramah Lingkungan",
+			TrendName:  "Produk Ramah Lingkungan",
 			Category:   "eco-friendly",
 			TrendScore: 0.85,
-			GrowthRate: 25.5,
+			GrowthRate: &growth1,
 			Source:     "google_trends",
 		},
 		{
-			Name:       "Fashion Lokal Indonesia",
+			TrendName:  "Fashion Lokal Indonesia",
 			Category:   "fashion",
 			TrendScore: 0.78,
-			GrowthRate: 18.3,
+			GrowthRate: &growth2,
 			Source:     "social_media",
 		},
 		{
-			Name:       "Makanan Sehat",
+			TrendName:  "Makanan Sehat",
 			Category:   "food",
 			TrendScore: 0.72,
-			GrowthRate: 15.2,
+			GrowthRate: &growth3,
 			Source:     "marketplace",
 		},
 		{
-			Name:       "Skincare Natural",
+			TrendName:  "Skincare Natural",
 			Category:   "beauty",
 			TrendScore: 0.88,
-			GrowthRate: 32.1,
+			GrowthRate: &growth4,
 			Source:     "instagram",
 		},
 		{
-			Name:       "Gadget Accessories",
+			TrendName:  "Gadget Accessories",
 			Category:   "electronics",
 			TrendScore: 0.65,
-			GrowthRate: 12.4,
+			GrowthRate: &growth5,
 			Source:     "marketplace",
 		},
 	}
 
 	// Add category-specific trends
 	for _, cat := range categories {
+		growth := 10.0 + float64(len(cat)%20)
 		trends = append(trends, models.MarketTrend{
-			Name:       fmt.Sprintf("Trend %s", cat),
+			TrendName:  fmt.Sprintf("Trend %s", cat),
 			Category:   cat,
 			TrendScore: 0.6 + (float64(len(cat)%30) / 100.0),
-			GrowthRate: 10.0 + float64(len(cat)%20),
+			GrowthRate: &growth,
 			Source:     "analysis",
 		})
 	}

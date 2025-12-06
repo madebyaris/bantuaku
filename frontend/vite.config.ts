@@ -18,11 +18,19 @@ export default defineConfig({
       interval: 1000,
     },
     proxy: {
-      '/api': {
-        // In Docker, use service name 'backend', otherwise use localhost
+      // Chat endpoints need longer timeout (AI responses can take 30+ seconds)
+      '/api/v1/chat/message': {
         target: process.env.VITE_API_URL || (process.env.DOCKER ? 'http://backend:8080' : 'http://localhost:8080'),
         changeOrigin: true,
         secure: false,
+        timeout: 120000, // 120 seconds for chat messages
+      },
+      // Other API endpoints
+      '/api': {
+        target: process.env.VITE_API_URL || (process.env.DOCKER ? 'http://backend:8080' : 'http://localhost:8080'),
+        changeOrigin: true,
+        secure: false,
+        timeout: 60000, // 60 seconds for other API requests
       },
     },
   },

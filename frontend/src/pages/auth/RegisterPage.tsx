@@ -13,7 +13,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { api } from '@/lib/api'
-import { useAuthStore } from '@/state/auth'
 import { toast } from '@/components/ui/toaster'
 
 const industries = [
@@ -27,7 +26,6 @@ const industries = [
 
 export function RegisterPage() {
   const navigate = useNavigate()
-  const login = useAuthStore((state) => state.login)
   const [storeName, setStoreName] = useState('')
   const [industry, setIndustry] = useState('')
   const [email, setEmail] = useState('')
@@ -40,9 +38,13 @@ export function RegisterPage() {
 
     try {
       const data = await api.auth.register(email, password, storeName, industry)
-      login(data)
-      toast({ title: 'Akun berhasil dibuat!', variant: 'success' })
-      navigate('/dashboard')
+      toast({ 
+        title: 'Akun berhasil dibuat!', 
+        description: 'Silakan periksa email Anda untuk kode verifikasi',
+        variant: 'success' 
+      })
+      // Redirect to verify email page with email parameter
+      navigate(`/verify-email?email=${encodeURIComponent(email)}`)
     } catch (err) {
       toast({
         title: 'Gagal mendaftar',

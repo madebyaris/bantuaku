@@ -206,11 +206,48 @@ cp .env.example .env
 - `KOLOSAL_API_KEY` - Get from https://api.kolosal.ai (optional for basic features)
 - `JWT_SECRET` - Generate with: `openssl rand -base64 32` (change from default!)
 
+**Email Verification (Required for user registration):**
+- `MAILJET_API_KEY` - Get from https://www.mailjet.com/
+- `MAILJET_API_SECRET` - Get from https://www.mailjet.com/
+- `APP_BASE_URL` - Base URL for email links (e.g., `http://localhost:3000`)
+
+**RAG & Embeddings (New):**
+- `EMBEDDING_PROVIDER` - Embedding provider: `kolosal` (default), `openai`, `cohere`
+- `EMBEDDING_API_KEY` - API key for embedding provider (falls back to `KOLOSAL_API_KEY` if empty)
+
+**Forecasting Service (New):**
+- `FORECASTING_SERVICE_URL` - URL for Python forecasting microservice (default: `http://localhost:8001`, use `http://forecasting:8000` in Docker)
+
+**Regulations Scraper (New):**
+- `REGULATIONS_SCRAPER_ENABLED` - Enable regulations scraper: `true` (default) or `false`
+- `REGULATIONS_SCRAPER_SCHEDULE` - Cron schedule for scraper (default: `0 2 * * *` - daily at 2 AM)
+- `REGULATIONS_BASE_URL` - Base URL for regulations (default: `https://peraturan.go.id`)
+
+**Stripe Billing (New):**
+- `STRIPE_SECRET_KEY` - Stripe secret key for billing (test mode)
+- `STRIPE_WEBHOOK_SECRET` - Stripe webhook secret for subscription events
+
 **Quick setup:**
 ```env
 # Minimum required for local development
 KOLOSAL_API_KEY=your-api-key-here
 JWT_SECRET=your-secure-secret-here
+
+# Email verification (required for user registration)
+MAILJET_API_KEY=your-mailjet-api-key
+MAILJET_API_SECRET=your-mailjet-api-secret
+APP_BASE_URL=http://localhost:3000
+
+# Forecasting service (for Docker, use service name)
+FORECASTING_SERVICE_URL=http://forecasting:8000
+
+# Optional: Stripe billing (test mode)
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# Optional: Regulations scraper
+REGULATIONS_SCRAPER_ENABLED=true
+REGULATIONS_SCRAPER_SCHEDULE=0 2 * * *
 ```
 
 See `.env.example` for complete configuration options and documentation.
@@ -218,8 +255,12 @@ See `.env.example` for complete configuration options and documentation.
 ## 📚 API Endpoints
 
 ### Authentication
-- `POST /api/v1/auth/register` - Register new user
-- `POST /api/v1/auth/login` - Login
+- `POST /api/v1/auth/register` - Register new user (requires email verification)
+- `POST /api/v1/auth/login` - Login (requires verified email)
+- `POST /api/v1/auth/verify-email` - Verify email with 5-digit OTP
+- `POST /api/v1/auth/resend-verification` - Resend verification email
+- `POST /api/v1/auth/forgot-password` - Request password reset
+- `POST /api/v1/auth/reset-password` - Reset password with token
 
 ### Chat & Conversations (AI-First Interface)
 - `POST /api/v1/chat/start` - Start new conversation
@@ -296,6 +337,14 @@ See `.env.example` for complete configuration options and documentation.
 - [ ] **Billing & Subscriptions** - 3-tier pricing (Free, Pro, Enterprise)
 - [ ] **Multi-Company Management** - Support for multiple businesses per user
 - [ ] **Export Reports** - PDF/Excel export for forecasts and insights
+
+## Status Update (Dec 2025)
+- Company/store model unified to `company_id` across backend + frontend (new migration 017).
+- Forecast, market, marketing, and regulation pages now call live APIs (no more static UI).
+- Notifications API + UI added (list/read/delete) with new migration 018.
+- Billing pages added (pricing + billing) wired to Stripe checkout endpoints.
+- Chat shows RAG citations returned by `/chat/message`.
+- Regulation/Trends wiring is live; marketplace connectors and advanced forecasting remain roadmap items.
 
 ## 🏗️ Architecture
 

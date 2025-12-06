@@ -130,6 +130,11 @@ func NewInsufficientStockError(productID string, requested, available int) *AppE
 	return NewAppError(ErrCodeInsufficientStock, message, details)
 }
 
+// NewRateLimitError creates a rate limit error
+func NewRateLimitError(message, details string) *AppError {
+	return NewAppError(ErrCodeLimitExceeded, message, details)
+}
+
 // IsAppError checks if an error is an AppError
 func IsAppError(err error) bool {
 	_, ok := err.(*AppError)

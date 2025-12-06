@@ -34,9 +34,9 @@ type ImportError struct {
 
 // RecordSale records a single manual sale
 func (h *Handler) RecordSale(w http.ResponseWriter, r *http.Request) {
-	storeID := middleware.GetStoreID(r.Context())
-	if storeID == "" {
-		respondError(w, http.StatusUnauthorized, "Store not found in context")
+	companyID := middleware.GetCompanyID(r.Context())
+	if companyID == "" {
+		respondError(w, http.StatusUnauthorized, "Company not found in context")
 		return
 	}
 
@@ -66,8 +66,8 @@ func (h *Handler) RecordSale(w http.ResponseWriter, r *http.Request) {
 	// Verify product belongs to store
 	var productExists bool
 	err := h.db.Pool().QueryRow(r.Context(), `
-		SELECT EXISTS(SELECT 1 FROM products WHERE id = $1 AND store_id = $2)
-	`, req.ProductID, storeID).Scan(&productExists)
+		SELECT EXISTS(SELECT 1 FROM products WHERE id = $1 AND company_id = $2)
+	`, req.ProductID, companyID).Scan(&productExists)
 	if err != nil || !productExists {
 		respondError(w, http.StatusBadRequest, "Product not found")
 		return
@@ -76,10 +76,10 @@ func (h *Handler) RecordSale(w http.ResponseWriter, r *http.Request) {
 	// Insert sale record
 	var saleID int64
 	err = h.db.Pool().QueryRow(r.Context(), `
-		INSERT INTO sales_history (store_id, product_id, quantity, price, sale_date, source, created_at)
+		INSERT INTO sales_history (company_id, product_id, quantity, price, sale_date, source, created_at)
 		VALUES ($1, $2, $3, $4, $5, 'manual', $6)
 		RETURNING id
-	`, storeID, req.ProductID, req.Quantity, req.Price, req.SaleDate, time.Now()).Scan(&saleID)
+	`, companyID, req.ProductID, req.Quantity, req.Price, req.SaleDate, time.Now()).Scan(&saleID)
 
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to record sale")
@@ -92,7 +92,7 @@ func (h *Handler) RecordSale(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusCreated, models.Sale{
 		ID:        saleID,
-		StoreID:   storeID,
+		CompanyID: companyID,
 		ProductID: req.ProductID,
 		Quantity:  req.Quantity,
 		Price:     req.Price,
@@ -104,9 +104,9 @@ func (h *Handler) RecordSale(w http.ResponseWriter, r *http.Request) {
 
 // ImportCSV handles bulk CSV sales import
 func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
-	storeID := middleware.GetStoreID(r.Context())
-	if storeID == "" {
-		respondError(w, http.StatusUnauthorized, "Store not found in context")
+	companyID := middleware.GetCompanyID(r.Context())
+	if companyID == "" {
+		respondError(w, http.StatusUnauthorized, "Company not found in context")
 		return
 	}
 
@@ -151,8 +151,8 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 	// Build product name to ID mapping
 	productMap := make(map[string]string)
 	rows, err := h.db.Pool().Query(r.Context(), `
-		SELECT id, product_name FROM products WHERE store_id = $1
-	`, storeID)
+		SELECT id, name FROM products WHERE company_id = $1
+	`, companyID)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -221,9 +221,9 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 
 		// Insert sale
 		_, err = h.db.Pool().Exec(r.Context(), `
-			INSERT INTO sales_history (store_id, product_id, quantity, price, sale_date, source, created_at)
+			INSERT INTO sales_history (company_id, product_id, quantity, price, sale_date, source, created_at)
 			VALUES ($1, $2, $3, $4, $5, 'csv', $6)
-		`, storeID, productID, quantity, price, saleDate, time.Now())
+		`, companyID, productID, quantity, price, saleDate, time.Now())
 
 		if err != nil {
 			result.Errors = append(result.Errors, ImportError{Row: rowNum, Error: "Database error"})
@@ -242,9 +242,9 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 
 // ListSales returns sales history for the store
 func (h *Handler) ListSales(w http.ResponseWriter, r *http.Request) {
-	storeID := middleware.GetStoreID(r.Context())
-	if storeID == "" {
-		respondError(w, http.StatusUnauthorized, "Store not found in context")
+	companyID := middleware.GetCompanyID(r.Context())
+	if companyID == "" {
+		respondError(w, http.StatusUnauthorized, "Company not found in context")
 		return
 	}
 
@@ -256,22 +256,22 @@ func (h *Handler) ListSales(w http.ResponseWriter, r *http.Request) {
 
 	if productID != "" {
 		query = `
-			SELECT s.id, s.store_id, s.product_id, s.quantity, s.price, s.sale_date, s.source, s.created_at
+			SELECT s.id, s.company_id, s.product_id, s.quantity, s.price, s.sale_date, s.source, s.created_at
 			FROM sales_history s
-			WHERE s.store_id = $1 AND s.product_id = $2
+			WHERE s.company_id = $1 AND s.product_id = $2
 			ORDER BY s.sale_date DESC
 			LIMIT $3
 		`
-		args = []interface{}{storeID, productID, limit}
+		args = []interface{}{companyID, productID, limit}
 	} else {
 		query = `
-			SELECT s.id, s.store_id, s.product_id, s.quantity, s.price, s.sale_date, s.source, s.created_at
+			SELECT s.id, s.company_id, s.product_id, s.quantity, s.price, s.sale_date, s.source, s.created_at
 			FROM sales_history s
-			WHERE s.store_id = $1
+			WHERE s.company_id = $1
 			ORDER BY s.sale_date DESC
 			LIMIT $2
 		`
-		args = []interface{}{storeID, limit}
+		args = []interface{}{companyID, limit}
 	}
 
 	rows, err := h.db.Pool().Query(r.Context(), query, args...)
@@ -284,7 +284,7 @@ func (h *Handler) ListSales(w http.ResponseWriter, r *http.Request) {
 	sales := []models.Sale{}
 	for rows.Next() {
 		var s models.Sale
-		err := rows.Scan(&s.ID, &s.StoreID, &s.ProductID, &s.Quantity, &s.Price, &s.SaleDate, &s.Source, &s.CreatedAt)
+		err := rows.Scan(&s.ID, &s.CompanyID, &s.ProductID, &s.Quantity, &s.Price, &s.SaleDate, &s.Source, &s.CreatedAt)
 		if err != nil {
 			continue
 		}

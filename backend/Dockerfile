@@ -21,8 +21,8 @@ FROM alpine:3.19
 
 WORKDIR /app
 
-# Install ca-certificates for HTTPS
-RUN apk --no-cache add ca-certificates tzdata
+# Install ca-certificates for HTTPS and Poppler utils for PDF to image conversion
+RUN apk --no-cache add ca-certificates tzdata poppler-utils
 
 # Copy binary from builder
 COPY --from=builder /app/bantuaku .

@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Sparkles, User, Upload } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Send, Loader2, Sparkles, User, Upload, Zap, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useChatStore, ChatMessage } from '@/state/chat'
+import { api, PredictionCompleteness, PredictionUsage } from '@/lib/api'
 
 interface ChatInterfaceProps {
   isWidget?: boolean
@@ -19,9 +19,69 @@ const suggestedQuestions = [
 ]
 
 export function ChatInterface({ isWidget = false, className }: ChatInterfaceProps) {
-  const { messages, loading, addMessage, setLoading } = useChatStore()
+  const {
+    messages,
+    loading,
+    currentConversationId,
+    addMessage,
+    setLoading,
+    initializeConversation,
+  } = useChatStore()
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [initializing, setInitializing] = useState(true)
+  
+  // Prediction CTA state
+  const [completeness, setCompleteness] = useState<PredictionCompleteness | null>(null)
+  const [predictionUsage, setPredictionUsage] = useState<PredictionUsage | null>(null)
+  const [showPredictCTA, setShowPredictCTA] = useState(false)
+  const [startingPrediction, setStartingPrediction] = useState(false)
+
+  // Check completeness after messages update
+  const checkCompleteness = useCallback(async () => {
+    try {
+      const [compData, statusData, usageData] = await Promise.all([
+        api.prediction.checkCompleteness(),
+        api.prediction.status(),
+        api.prediction.usage(),
+      ])
+      setCompleteness(compData)
+      setPredictionUsage(usageData)
+      // Show CTA if complete and no active job
+      if (compData.is_complete && !statusData.has_active_job) {
+        setShowPredictCTA(true)
+      }
+    } catch (err) {
+      console.error('Failed to check completeness:', err)
+    }
+  }, [])
+
+  // Initialize conversation on mount ONLY ONCE (single continuous chat)
+  useEffect(() => {
+    let mounted = true
+    
+    const init = async () => {
+      try {
+        await initializeConversation()
+        // Also check completeness on init
+        if (mounted) {
+          await checkCompleteness()
+        }
+      } catch (err) {
+        console.error('Failed to initialize conversation:', err)
+      } finally {
+        if (mounted) {
+          setInitializing(false)
+        }
+      }
+    }
+    init()
+    
+    return () => {
+      mounted = false
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Empty dependency array - only run on mount
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -50,8 +110,28 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
     }
   }, [])
 
+  // Handle starting prediction
+  const handleStartPrediction = async () => {
+    setStartingPrediction(true)
+    try {
+      await api.prediction.start()
+      setShowPredictCTA(false)
+      // Add system message about prediction starting
+      addMessage({
+        id: Date.now().toString(),
+        role: 'assistant',
+        text: '🚀 Saya mulai menganalisis bisnis Anda! Anda akan menerima notifikasi ketika selesai. Silakan lanjutkan percakapan atau kunjungi Dashboard untuk melihat progress.',
+        timestamp: new Date(),
+      })
+    } catch (err) {
+      console.error('Failed to start prediction:', err)
+    } finally {
+      setStartingPrediction(false)
+    }
+  }
+
   async function sendMessage(text: string) {
-    if (!text.trim() || loading) return
+    if (!text.trim() || loading || !currentConversationId) return
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -65,19 +145,22 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
     setLoading(true)
 
     try {
-      const response = await api.ai.analyze(text)
+      const response = await api.chat.sendMessage(currentConversationId, text.trim())
       
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        text: response.answer,
-        confidence: response.confidence,
-        dataSources: response.data_sources,
+        text: response.assistant_reply,
+        citations: response.citations,
         timestamp: new Date(),
       }
 
       addMessage(assistantMessage)
+      
+      // Check completeness after each message (AI might have saved data)
+      await checkCompleteness()
     } catch (err) {
+      console.error('Failed to send message:', err)
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -93,6 +176,15 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     sendMessage(input)
+  }
+
+  if (initializing) {
+    return (
+      <div className={cn("flex flex-col items-center justify-center h-full", className)}>
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+        <p className="mt-4 text-slate-400">Memuat chat...</p>
+      </div>
+    )
   }
 
   return (
@@ -172,6 +264,18 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
                     </span>
                   </div>
                 )}
+                {message.citations && message.citations.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-white/10 space-y-2">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">Sumber</p>
+                    <ul className="space-y-1">
+                      {message.citations.map((c, idx) => (
+                        <li key={idx} className="text-xs text-slate-300">
+                          • {c.text} <span className="text-slate-500">({c.source})</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
 
               {message.role === 'user' && (
@@ -200,6 +304,46 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Prediction CTA */}
+      {showPredictCTA && completeness?.is_complete && !isWidget && (
+        <div className="mx-4 mb-2 p-4 bg-gradient-to-r from-emerald-500/10 to-emerald-600/10 border border-emerald-500/30 rounded-xl backdrop-blur-md z-20">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-500/20 rounded-lg">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-100">Profil bisnis lengkap!</p>
+                <p className="text-xs text-slate-400">
+                  Siap untuk analisis mendalam
+                  {predictionUsage && !predictionUsage.unlimited && (
+                    <span className={cn(
+                      "ml-2",
+                      predictionUsage.remaining <= 2 ? 'text-amber-400' : 'text-slate-400',
+                      predictionUsage.remaining === 0 && 'text-red-400'
+                    )}>
+                      • {predictionUsage.remaining} tersisa
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={handleStartPrediction}
+              disabled={startingPrediction || (predictionUsage?.remaining === 0 && !predictionUsage?.unlimited)}
+              className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+            >
+              {startingPrediction ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Zap className="w-4 h-4 mr-2" />
+              )}
+              Predict It!
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Input */}
       <div className={cn("border-t border-white/10 bg-black/50 backdrop-blur-xl z-20", isWidget ? "p-3" : "p-4")}>
         <form onSubmit={handleSubmit} className="flex gap-3 max-w-3xl mx-auto">
@@ -215,11 +359,11 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ketik pertanyaan..."
-            disabled={loading}
+            disabled={loading || !currentConversationId}
             className="flex-1 bg-white/5 border-white/10 text-slate-100 placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20"
             autoFocus={!isWidget}
           />
-          <Button type="submit" disabled={loading || !input.trim()} className="bg-emerald-500 hover:bg-emerald-400 text-black">
+          <Button type="submit" disabled={loading || !input.trim() || !currentConversationId} className="bg-emerald-500 hover:bg-emerald-400 text-black">
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
@@ -228,9 +372,9 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
           </Button>
         </form>
         {!isWidget && (
-            <p className="text-xs text-slate-500 text-center mt-2">
+          <p className="text-xs text-slate-500 text-center mt-2">
             AI dapat membuat kesalahan. Verifikasi informasi penting.
-            </p>
+          </p>
         )}
       </div>
     </div>

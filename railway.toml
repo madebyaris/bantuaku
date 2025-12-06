@@ -1,0 +1,15 @@
+# Railway Configuration for Bantuaku (All-in-One)
+# https://docs.railway.com/guides/config-as-code
+# Runs: Backend + Frontend + Forecasting in single container
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+watchPatterns = ["backend/**", "frontend/**", "services/forecasting/**"]
+
+[deploy]
+healthcheckPath = "/api/v1/health"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+numReplicas = 1
