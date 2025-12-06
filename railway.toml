@@ -1,14 +1,10 @@
 # Railway Configuration for Bantuaku Backend
-# This is a monorepo - each service needs its own Railway service
+# This is a monorepo - set Root Directory to "backend" in Railway Dashboard
 
 [build]
-# Use Dockerfile builder with correct context
 builder = "dockerfile"
-dockerfilePath = "backend/Dockerfile"
-
-# Root directory for this service (monorepo support)
-# Set this in Railway dashboard: Settings > Root Directory > backend
-watchPatterns = ["backend/**"]
+dockerfilePath = "Dockerfile"
+watchPatterns = ["**"]
 
 [deploy]
 healthcheckPath = "/api/v1/health"
