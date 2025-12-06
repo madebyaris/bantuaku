@@ -184,21 +184,22 @@ func (e *Extractor) extractWithOCR(ctx context.Context, pdfPath string) (string,
 			continue
 		}
 
-		// Encode to base64
+		// Encode to base64 with data URL prefix (required by Kolosal API)
 		imageBase64 := base64.StdEncoding.EncodeToString(imageBytes)
+		imageDataURL := fmt.Sprintf("data:image/png;base64,%s", imageBase64)
 
 		// Call Kolosal OCR
 		ocrResp, err := e.kolosal.OCR(ctx, kolosal.OCRRequest{
-			Image:    imageBase64,
-			Language: "id", // Indonesian
+			ImageData: imageDataURL,
 		})
 		if err != nil {
 			e.log.Warn("OCR failed for page", "page", i+1, "error", err)
 			continue
 		}
 
-		if ocrResp.Text != "" {
-			allText.WriteString(ocrResp.Text)
+		extractedText := ocrResp.GetText()
+		if extractedText != "" {
+			allText.WriteString(extractedText)
 			if i < len(imageFiles)-1 {
 				allText.WriteString("\n\n") // Page separator
 			}

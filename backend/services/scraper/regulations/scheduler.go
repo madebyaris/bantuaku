@@ -7,22 +7,32 @@ import (
 	"time"
 
 	"github.com/bantuaku/backend/logger"
+	"github.com/bantuaku/backend/services/chat"
+	"github.com/bantuaku/backend/services/embedding"
+	"github.com/bantuaku/backend/services/exa"
 	"github.com/bantuaku/backend/services/kolosal"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Scheduler handles scheduled scraping jobs
+// Scheduler handles scheduled scraping jobs with AI-powered discovery
 type Scheduler struct {
+	// Legacy components
 	crawler   *Crawler
 	extractor *Extractor
 	chunker   *Chunker
-	store     *Store
-	log       logger.Logger
-	running   bool
-	mu        sync.Mutex
+
+	// New AI-powered components
+	keywordGen *KeywordGenerator
+	discovery  *DiscoveryService
+	processor  *ContentProcessor
+	store      *Store
+
+	log     logger.Logger
+	running bool
+	mu      sync.Mutex
 }
 
-// NewScheduler creates a new scheduler
+// NewScheduler creates a new scheduler (legacy mode without AI)
 func NewScheduler(pool *pgxpool.Pool, baseURL string, kolosalClient *kolosal.Client) *Scheduler {
 	crawler := NewCrawler(baseURL)
 	extractor := NewExtractor(kolosalClient)
@@ -39,7 +49,56 @@ func NewScheduler(pool *pgxpool.Pool, baseURL string, kolosalClient *kolosal.Cli
 	}
 }
 
-// RunJob runs a single scraping job
+// NewSchedulerV2 creates a new AI-powered scheduler
+func NewSchedulerV2(
+	pool *pgxpool.Pool,
+	baseURL string,
+	kolosalClient *kolosal.Client,
+	exaClient *exa.Client,
+	chatProvider chat.ChatProvider,
+	embedder embedding.Embedder,
+	chatModel string,
+) *Scheduler {
+	crawler := NewCrawler(baseURL)
+	extractor := NewExtractor(kolosalClient)
+	chunker := NewChunker()
+
+	// Use store with embedder
+	var store *Store
+	if embedder != nil {
+		store = NewStoreWithEmbedder(pool, embedder)
+	} else {
+		store = NewStore(pool)
+	}
+
+	// Create new AI-powered components
+	var keywordGen *KeywordGenerator
+	var discovery *DiscoveryService
+	var processor *ContentProcessor
+
+	if chatProvider != nil {
+		keywordGen = NewKeywordGenerator(chatProvider, chatModel)
+		processor = NewContentProcessor(extractor, chatProvider, chatModel)
+	}
+
+	if exaClient != nil {
+		discovery = NewDiscoveryService(exaClient)
+	}
+
+	return &Scheduler{
+		crawler:    crawler,
+		extractor:  extractor,
+		chunker:    chunker,
+		keywordGen: keywordGen,
+		discovery:  discovery,
+		processor:  processor,
+		store:      store,
+		log:        *logger.Default(),
+		running:    false,
+	}
+}
+
+// RunJob runs a single scraping job (uses AI-powered pipeline if available)
 func (s *Scheduler) RunJob(ctx context.Context, maxPages int) error {
 	s.mu.Lock()
 	if s.running {
@@ -55,7 +114,80 @@ func (s *Scheduler) RunJob(ctx context.Context, maxPages int) error {
 		s.mu.Unlock()
 	}()
 
-	s.log.Info("Starting regulation scraping job", "max_pages", maxPages)
+	// Use AI-powered pipeline if components are available
+	if s.keywordGen != nil && s.discovery != nil && s.processor != nil {
+		return s.runJobV2(ctx, maxPages)
+	}
+
+	// Fall back to legacy pipeline
+	return s.runLegacyJob(ctx, maxPages)
+}
+
+// runJobV2 runs the AI-powered scraping pipeline
+func (s *Scheduler) runJobV2(ctx context.Context, maxResultsPerKeyword int) error {
+	s.log.Info("========== REGULATION SCRAPER V2 STARTED ==========")
+
+	startTime := time.Now()
+	var totalStored, totalErrors int
+
+	// Step 1: Generate UMKM keywords using AI
+	s.log.Info(">>> STEP 1/4: Generating UMKM keywords...")
+	keywords, err := s.keywordGen.GenerateKeywords(ctx)
+	if err != nil {
+		s.log.Warn("AI keyword generation failed, using fallback", "error", err)
+		keywords = s.keywordGen.getFallbackKeywords()
+	}
+	s.log.Info("<<< STEP 1 COMPLETE", "keywords_count", len(keywords))
+
+	// Step 2: Discover regulations via Exa.ai
+	s.log.Info(">>> STEP 2/4: Discovering regulations via Exa.ai...")
+	discovered, err := s.discovery.DiscoverRegulations(ctx, keywords, maxResultsPerKeyword)
+	if err != nil {
+		return fmt.Errorf("discovery failed: %w", err)
+	}
+	s.log.Info("<<< STEP 2 COMPLETE", "discovered_count", len(discovered))
+
+	if len(discovered) == 0 {
+		s.log.Warn("No regulations discovered, job ending early")
+		return nil
+	}
+
+	// Step 3: Process content (extract, summarize)
+	s.log.Info(">>> STEP 3/4: Processing regulation content...")
+	processed := s.processor.ProcessBatch(ctx, discovered)
+	s.log.Info("<<< STEP 3 COMPLETE", "processed_count", len(processed))
+
+	// Step 4: Store with embeddings
+	s.log.Info(">>> STEP 4/4: Storing regulations with embeddings...")
+	for i, reg := range processed {
+		s.log.Debug("Storing regulation", "index", i+1, "title", reg.Title)
+
+		_, err := s.store.StoreProcessedRegulation(ctx, reg)
+		if err != nil {
+			s.log.Warn("Failed to store regulation", "title", reg.Title, "error", err)
+			totalErrors++
+			continue
+		}
+		totalStored++
+	}
+	s.log.Info("<<< STEP 4 COMPLETE", "stored_count", totalStored, "errors", totalErrors)
+
+	totalDuration := time.Since(startTime)
+	s.log.Info("========== REGULATION SCRAPER V2 COMPLETED ==========",
+		"total_duration_sec", totalDuration.Seconds(),
+		"keywords_used", len(keywords),
+		"discovered", len(discovered),
+		"processed", len(processed),
+		"stored", totalStored,
+		"errors", totalErrors,
+	)
+
+	return nil
+}
+
+// runLegacyJob runs the original scraping job (for backwards compatibility)
+func (s *Scheduler) runLegacyJob(ctx context.Context, maxPages int) error {
+	s.log.Info("Starting LEGACY regulation scraping job", "max_pages", maxPages)
 
 	// Step 1: Crawl regulations
 	regulations, err := s.crawler.CrawlRegulations(ctx, maxPages)
@@ -126,7 +258,7 @@ func (s *Scheduler) RunJob(ctx context.Context, maxPages int) error {
 		time.Sleep(1 * time.Second)
 	}
 
-	s.log.Info("Scraping job completed",
+	s.log.Info("Legacy scraping job completed",
 		"processed", processed,
 		"skipped", skipped,
 		"errors", errors,
@@ -179,4 +311,3 @@ func (s *Scheduler) IsRunning() bool {
 	defer s.mu.Unlock()
 	return s.running
 }
-

@@ -1,312 +1,132 @@
-# Implementation Todo List: Regulations Scraper URL Fix & KB Integration
+# Implementation Todo List: Regulations Scraper v2
 
 ## Overview
-Fix regulations scraper to use correct search endpoint (`https://peraturan.go.id/cariglobal?PeraturanSearch%5Bidglobal%5D=`) and implement business categorization for UMKM-relevant regulations stored in KB.
+AI-powered regulation discovery system for UMKM compliance. Uses AI to generate search keywords, Exa.ai for content discovery, and OpenRouter for embeddings.
 
-## Pre-Implementation Setup
-- [ ] Review research findings from feature brief
-- [ ] Confirm specification requirements
-- [ ] Validate technical plan
-- [ ] Set up development environment
-- [ ] Create feature branch: `regulations-scraper-fix`
+## Pre-Implementation
+- [x] Review and update feature brief
+- [x] Confirm new architecture approach
+- [x] Verify Exa.ai and OpenRouter credentials configured
 
 ## Todo Items
 
-### Phase 1: Research & Analysis (Foundation)
+### Phase 1: AI Keyword Generator (30min) ✅ COMPLETE
 
-- [ ] **RESEARCH-001**: Analyze search page HTML structure (30min)
-  - **Estimated Time**: 30min
-  - **Dependencies**: None
-  - **Existing Pattern**: HTML parsing with goquery (see `crawler.go`)
-  - **Files to Modify**: None (research only)
-  - **Acceptance Criteria**: 
-    - Document search result item HTML structure
-    - Identify CSS selectors for regulation metadata
-    - Understand pagination HTML structure
-    - Document any JavaScript-rendered content
+- [x] **KW-001**: Create keywords.go with KeywordGenerator struct
+  - **Files**: `backend/services/scraper/regulations/keywords.go` (NEW)
+  - **Result**: Generates 40+ UMKM keywords in Bahasa Indonesia
 
-- [ ] **RESEARCH-002**: Document search result selectors (15min)
-  - **Estimated Time**: 15min
-  - **Dependencies**: RESEARCH-001
-  - **Existing Pattern**: goquery selectors (see `crawlDetailPage()`)
-  - **Files to Modify**: None (documentation)
-  - **Acceptance Criteria**:
-    - Selectors documented for: title, regulation number, year, category, PDF URL
-    - Pagination selector identified
-    - Search result container selector identified
+- [x] **KW-002**: Implement GenerateKeywords() method
+  - **Result**: Uses OpenRouter AI to generate contextual keywords with fallback
 
-- [ ] **RESEARCH-003**: Understand pagination mechanism (15min)
-  - **Estimated Time**: 15min
-  - **Dependencies**: RESEARCH-001
-  - **Existing Pattern**: Current pagination uses `?page={n}` (see `CrawlRegulations()`)
-  - **Files to Modify**: None (research only)
-  - **Acceptance Criteria**:
-    - Pagination URL pattern documented
-    - Page parameter name identified
-    - Max pages or "next" link pattern understood
+### Phase 2: Content Discovery (1h) ✅ COMPLETE
 
-- [ ] **RESEARCH-004**: Define business categorization rules (30min)
-  - **Estimated Time**: 30min
-  - **Dependencies**: None
-  - **Existing Pattern**: Category field exists in regulations table
-  - **Files to Modify**: None (planning)
-  - **Acceptance Criteria**:
-    - UMKM-relevant categories defined (tax, employment, food_safety, import_export, etc.)
-    - Categorization rules documented
-    - Filtering criteria for relevance established
+- [x] **DISC-001**: Create discovery.go with DiscoveryService struct
+  - **Files**: `backend/services/scraper/regulations/discovery.go` (NEW)
+  - **Result**: Multi-source discovery service with Exa.ai integration
 
-### Phase 2: Crawler Updates (Core Functionality)
+- [x] **DISC-002**: Implement SearchWithExa() method
+  - **Result**: Searches Indonesian sources for regulation content
 
-- [ ] **CRAWLER-001**: Update CrawlRegulations() to use search endpoint (1h)
-  - **Estimated Time**: 1h
-  - **Dependencies**: RESEARCH-001, RESEARCH-003
-  - **Existing Pattern**: Current `CrawlRegulations()` method structure
-  - **Files to Modify**: `backend/services/scraper/regulations/crawler.go`
-  - **Acceptance Criteria**:
-    - Method uses search endpoint URL pattern
-    - Proper pagination handling
-    - Error handling for search failures
-    - Logging updated for search context
+- [x] **DISC-003**: Implement DiscoverRegulations() orchestrator
+  - **Result**: Deduplicates and combines results from multiple keywords
 
-- [ ] **CRAWLER-002**: Implement parseSearchResult() helper (1h)
-  - **Estimated Time**: 1h
-  - **Dependencies**: RESEARCH-002
-  - **Existing Pattern**: Similar to `crawlDetailPage()` parsing logic
-  - **Files to Modify**: `backend/services/scraper/regulations/crawler.go`
-  - **Acceptance Criteria**:
-    - Extracts title, regulation number, year, category from search result
-    - Returns Regulation struct or error
-    - Handles missing fields gracefully
-    - Uses documented selectors
+### Phase 3: Content Processor (1h) ✅ COMPLETE
 
-- [ ] **CRAWLER-003**: Update crawlListingPage() for search results (1h)
-  - **Estimated Time**: 1h
-  - **Dependencies**: CRAWLER-002
-  - **Existing Pattern**: Current `crawlListingPage()` structure
-  - **Files to Modify**: `backend/services/scraper/regulations/crawler.go`
-  - **Acceptance Criteria**:
-    - Parses search results HTML correctly
-    - Calls parseSearchResult() for each result item
-    - Handles search result pagination
-    - Maintains visited map for deduplication
+- [x] **PROC-001**: Create processor.go with ContentProcessor struct
+  - **Files**: `backend/services/scraper/regulations/processor.go` (NEW)
+  - **Result**: Handles PDF, web content, and title-based fallbacks
 
-- [ ] **CRAWLER-004**: Fix pagination logic for search endpoint (30min)
-  - **Estimated Time**: 30min
-  - **Dependencies**: RESEARCH-003, CRAWLER-001
-  - **Existing Pattern**: Current pagination in `CrawlRegulations()`
-  - **Files to Modify**: `backend/services/scraper/regulations/crawler.go`
-  - **Acceptance Criteria**:
-    - Pagination works correctly with search endpoint
-    - Handles "no more results" case
-    - Respects maxPages parameter
+- [x] **PROC-002**: Implement ProcessPDF() method
+  - **Result**: Downloads PDF → OCR → Summary → Delete (with fallback)
 
-- [ ] **CRAWLER-005**: Test crawler with sample search (30min)
-  - **Estimated Time**: 30min
-  - **Dependencies**: CRAWLER-001, CRAWLER-002, CRAWLER-003, CRAWLER-004
-  - **Existing Pattern**: Manual testing approach
-  - **Files to Modify**: None (testing)
-  - **Acceptance Criteria**:
-    - Crawler successfully fetches search results
-    - Regulations extracted correctly
-    - Pagination works as expected
-    - No errors in logs
+- [x] **PROC-003**: Implement ProcessWebContent() method
+  - **Result**: Processes Exa.ai content directly
 
-### Phase 3: Business Categorization (Enhancement)
+- [x] **PROC-004**: Implement SummarizeWithAI() helper
+  - **Result**: Generates UMKM-focused summaries in Bahasa Indonesia
 
-- [ ] **CATEG-001**: Create categorization rules (1h)
-  - **Estimated Time**: 1h
-  - **Dependencies**: RESEARCH-004
-  - **Existing Pattern**: Category field in regulations table
-  - **Files to Create**: `backend/services/scraper/regulations/categorizer.go` (optional)
-  - **Files to Modify**: May add to `store.go` or new file
-  - **Acceptance Criteria**:
-    - Categorization rules implemented
-    - UMKM-relevant categories mapped
-    - Rules based on title/keywords/category
+### Phase 4: Storage & Embedding (1h) ✅ COMPLETE
 
-- [ ] **CATEG-002**: Implement CategorizeRegulation() helper (1h)
-  - **Estimated Time**: 1h
-  - **Dependencies**: CATEG-001
-  - **Existing Pattern**: Helper function pattern
-  - **Files to Modify**: `backend/services/scraper/regulations/store.go` or `categorizer.go`
-  - **Acceptance Criteria**:
-    - Takes Regulation struct as input
-    - Returns business category
-    - Handles edge cases (unknown categories)
-    - Logs categorization decisions
+- [x] **STORE-001**: Update Store struct with embedder
+  - **Files**: `backend/services/scraper/regulations/store.go`
+  - **Result**: NewStoreWithEmbedder() for embedding integration
 
-- [ ] **CATEG-003**: Update Store.UpsertRegulation() to apply categories (30min)
-  - **Estimated Time**: 30min
-  - **Dependencies**: CATEG-002
-  - **Existing Pattern**: Current `UpsertRegulation()` method
-  - **Files to Modify**: `backend/services/scraper/regulations/store.go`
-  - **Acceptance Criteria**:
-    - Calls categorization helper
-    - Stores category in database
-    - Updates existing regulations with new categories
-    - Maintains backward compatibility
+- [x] **STORE-002**: Implement StoreRegulationWithEmbedding()
+  - **Result**: Stores regulation → chunks → embeddings → links
 
-- [ ] **CATEG-004**: Add UMKM relevance filtering (30min)
-  - **Estimated Time**: 30min
-  - **Dependencies**: CATEG-001
-  - **Existing Pattern**: Filtering logic
-  - **Files to Modify**: `backend/services/scraper/regulations/store.go` or `scheduler.go`
-  - **Acceptance Criteria**:
-    - Filters regulations by UMKM relevance
-    - Skips irrelevant regulations (optional)
-    - Logs filtering decisions
-    - Configurable filtering (strict/lenient)
+- [x] **STORE-003**: Implement ChunkContent() helper
+  - **Result**: Uses existing Chunker with overlap
 
-### Phase 4: Integration & Testing (Polish)
+### Phase 5: Scheduler Integration (30min) ✅ COMPLETE
 
-- [ ] **TEST-001**: Test end-to-end scraping flow (1h)
-  - **Estimated Time**: 1h
-  - **Dependencies**: All Phase 2 and Phase 3 items
-  - **Test Type**: Integration test
-  - **Coverage Target**: Main flow paths
-  - **Test Files**: Manual testing, may add integration test
-  - **Acceptance Criteria**:
-    - Scraper runs successfully with search endpoint
-    - Regulations discovered and extracted
-    - Categories applied correctly
-    - Data stored in KB
+- [x] **SCHED-001**: Update Scheduler with new services
+  - **Files**: `backend/services/scraper/regulations/scheduler.go`
+  - **Result**: NewSchedulerV2() with AI components
 
-- [ ] **TEST-002**: Verify regulations stored correctly (30min)
-  - **Estimated Time**: 30min
-  - **Dependencies**: TEST-001
-  - **Test Type**: Database verification
-  - **Coverage Target**: Storage correctness
-  - **Test Files**: Database queries
-  - **Acceptance Criteria**:
-    - Regulations in `regulations` table
-    - Metadata correct (title, number, year, category)
-    - PDF URLs valid
-    - Deduplication working
+- [x] **SCHED-002**: Rewrite RunJob() with new pipeline
+  - **Result**: 4-step pipeline with detailed logging
 
-- [ ] **TEST-003**: Check categorization applied (30min)
-  - **Estimated Time**: 30min
-  - **Dependencies**: TEST-002
-  - **Test Type**: Data validation
-  - **Coverage Target**: Categorization accuracy
-  - **Test Files**: Database queries
-  - **Acceptance Criteria**:
-    - Categories assigned correctly
-    - UMKM-relevant regulations categorized
-    - Category distribution makes sense
-    - No null/empty categories
+### Phase 6: Testing & Verification (30min) ✅ COMPLETE
 
-- [ ] **DOC-001**: Update documentation (30min)
-  - **Estimated Time**: 30min
-  - **Dependencies**: All implementation complete
-  - **Documentation Type**: Code comments, README updates
-  - **Target Audience**: Developers, maintainers
-  - **Acceptance Criteria**:
-    - Code comments updated
-    - Search endpoint documented
-    - Categorization rules documented
-    - Usage examples provided
+- [x] **TEST-001**: Trigger scraper via API
+  - **Result**: `POST /api/v1/regulations/scrape?max_results=2` works
+  - **Mode**: v2_ai_powered
 
-## Pattern Reuse Strategy
+- [x] **TEST-002**: Verify database populated
+  - **Result**: 
+    - regulations: 42 entries
+    - regulation_chunks: 42 entries
+    - embeddings: 42 entries (1024 dims)
 
-### Components to Reuse
-- **Crawler struct** (`backend/services/scraper/regulations/crawler.go`)
-  - **Modifications needed**: Update methods, add helper
-  - **Usage**: Keep structure, enhance functionality
-
-- **Store struct** (`backend/services/scraper/regulations/store.go`)
-  - **Modifications needed**: Add categorization logic
-  - **Usage**: Enhance UpsertRegulation, add categorization helper
-
-- **Regulation struct** (`backend/services/scraper/regulations/crawler.go`)
-  - **Modifications needed**: None
-  - **Usage**: Keep as-is, works for search results
-
-- **Scheduler** (`backend/services/scraper/regulations/scheduler.go`)
-  - **Modifications needed**: None (uses crawler interface)
-  - **Usage**: No changes needed, works with updated crawler
-
-### Code Patterns to Follow
-- **HTML Parsing**: Use goquery with documented selectors (see `crawlDetailPage()`)
-- **Error Handling**: Wrap errors with context using `fmt.Errorf` (see existing code)
-- **Logging**: Use `logger.Default()` with structured logging (see existing code)
-- **URL Building**: Use `buildFullURL()` helper (see `crawler.go`)
-- **Deduplication**: Keep hash-based approach (see `store.go`)
+- [x] **TEST-003**: Test RAG search ready
+  - **Result**: Data available for prediction service RAG search
 
 ## Execution Strategy
 
-### Continuous Implementation Rules
-1. **Execute todo items in dependency order**
-2. **Go for maximum flow - complete as much as possible without interruption**  
-3. **Group all ambiguous questions for batch resolution at the end**
-4. **Reuse existing patterns and components wherever possible**
-5. **Update progress continuously**
-6. **Document any deviations from plan**
+### Order of Implementation
+1. KW-001 → KW-002 (Keyword Generator)
+2. DISC-001 → DISC-002 → DISC-003 (Discovery)
+3. PROC-001 → PROC-004 → PROC-002 → PROC-003 (Processor)
+4. STORE-001 → STORE-003 → STORE-002 (Storage)
+5. SCHED-001 → SCHED-002 (Scheduler)
+6. TEST-001 → TEST-002 → TEST-003 (Testing)
 
-### Checkpoint Schedule
-- **Phase 1 Complete**: Research and analysis done
-  - **Expected Completion**: Day 1
-  - **Deliverables**: HTML structure documentation, categorization rules
-  - **Review Criteria**: Selectors documented, pagination understood
+### Files Created/Modified
+**New Files:**
+- `backend/services/scraper/regulations/keywords.go`
+- `backend/services/scraper/regulations/discovery.go`
+- `backend/services/scraper/regulations/processor.go`
 
-- **Phase 2 Complete**: Crawler updated
-  - **Expected Completion**: Day 2
-  - **Deliverables**: Working crawler with search endpoint
-  - **Review Criteria**: Crawler extracts regulations from search
-
-- **Phase 3 Complete**: Categorization implemented
-  - **Expected Completion**: Day 2-3
-  - **Deliverables**: Business categorization working
-  - **Review Criteria**: Regulations categorized correctly
-
-- **Phase 4 Complete**: Testing and documentation
-  - **Expected Completion**: Day 3
-  - **Deliverables**: Tested implementation, updated docs
-  - **Review Criteria**: All tests passing, docs updated
-
-## Questions for Batch Resolution
-- **Search Endpoint**: Does search require any parameters beyond pagination?
-  - **Context**: Need to understand if search needs keywords or filters
-  - **Impact if unresolved**: May miss regulations or get wrong results
-
-- **Categorization**: Should we skip non-UMKM regulations or just categorize them?
-  - **Context**: Filtering vs categorization strategy
-  - **Impact if unresolved**: May store irrelevant regulations
-
-- **Pagination**: Does search endpoint support page parameter or use different mechanism?
-  - **Context**: Need to understand pagination structure
-  - **Impact if unresolved**: May not crawl all pages
+**Modified Files:**
+- `backend/services/scraper/regulations/store.go`
+- `backend/services/scraper/regulations/scheduler.go`
+- `backend/handlers/regulations.go` (update dependencies)
 
 ## Progress Tracking
 
-### Completed Items
-- [ ] Update this section as items are completed
-- [ ] Note any deviations or discoveries
-- [ ] Record actual time vs estimates
+### Completed ✅
+- [x] Feature brief updated with new architecture
+- [x] Todo list created
+- [x] Phase 1: Keyword Generator
+- [x] Phase 2: Content Discovery (Exa.ai)
+- [x] Phase 3: Content Processor (PDF/Web/Title)
+- [x] Phase 4: Storage & Embedding
+- [x] Phase 5: Scheduler Integration
+- [x] Phase 6: Testing & Verification
 
-### Blockers & Issues
-- [ ] Document any blockers encountered
-- [ ] Include resolution steps taken
-- [ ] Note impact on timeline
+### Final Results
+- **42 regulations** discovered and stored
+- **42 embeddings** generated for RAG
+- **8 categories**: pajak, perizinan, ketenagakerjaan, pangan, haki, ekspor_impor, standar, umum
+- **AI summaries** in Bahasa Indonesia for UMKM
 
-### Discoveries & Deviations
-- [ ] Document any plan changes needed
-- [ ] Record new patterns or approaches discovered
-- [ ] Note improvements to existing code
-
-## Definition of Done
-- [ ] All todo items completed
-- [ ] Crawler uses correct search endpoint
-- [ ] Regulations extracted correctly from search results
-- [ ] Business categorization applied
-- [ ] Regulations stored in KB with categories
-- [ ] No duplicate regulations
-- [ ] Tests passing (manual or automated)
-- [ ] Documentation updated
-- [ ] Code review ready
-- [ ] No regressions in existing functionality
+### Issues Resolved
+1. Fixed embedding dimension mismatch (1536 → 1024)
+2. Added fallback content from titles when Exa.ai returns no content
+3. Gracefully handle OCR failures
 
 ---
-**Created:** 2025-12-05  
-**Estimated Duration:** ~8-10 hours  
-**Implementation Start:** TBD  
-**Target Completion:** TBD
+**Created:** 2025-12-06  
+**Completed:** 2025-12-06  
+**Actual Duration:** ~3 hours

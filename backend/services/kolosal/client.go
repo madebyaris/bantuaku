@@ -168,20 +168,35 @@ func (c *Client) CreateChatCompletion(ctx context.Context, req ChatCompletionReq
 }
 
 // OCRRequest represents an OCR request
+// According to https://api.kolosal.ai/docs#tag/ocr/post/ocr
 type OCRRequest struct {
-	ImageURL string `json:"image_url,omitempty"`
-	Image    string `json:"image,omitempty"` // Base64 encoded image
-	Language string `json:"language,omitempty"`
+	ImageData string `json:"image_data"` // Base64 encoded image with data URL prefix (e.g. "data:image/png;base64,...")
 }
 
 // OCRResponse represents an OCR response
 type OCRResponse struct {
-	Text string `json:"text"`
+	ExtractedText   string  `json:"extracted_text,omitempty"`
+	Text            string  `json:"text,omitempty"` // Alias for backwards compat
+	ConfidenceScore float64 `json:"confidence_score,omitempty"`
+	Notes           string  `json:"notes,omitempty"`
+	ProcessingTime  float64 `json:"processing_time,omitempty"`
+	Title           string  `json:"title,omitempty"`
+	Date            string  `json:"date,omitempty"`
+}
+
+// GetText returns the extracted text from either field
+func (r *OCRResponse) GetText() string {
+	if r.ExtractedText != "" {
+		return r.ExtractedText
+	}
+	return r.Text
 }
 
 // OCR performs OCR on an image
+// According to https://api.kolosal.ai/docs#tag/ocr/post/ocr
 func (c *Client) OCR(ctx context.Context, req OCRRequest) (*OCRResponse, error) {
-	url := fmt.Sprintf("%socr", c.BaseURL)
+	// Try direct endpoint first (without /v1/ prefix)
+	url := "https://api.kolosal.ai/ocr"
 
 	reqBody, err := json.Marshal(req)
 	if err != nil {
@@ -196,19 +211,32 @@ func (c *Client) OCR(ctx context.Context, req OCRRequest) (*OCRResponse, error) 
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
 
+	// Debug logging
+	fmt.Printf("[Kolosal OCR] Request URL: %s\n", url)
+	fmt.Printf("[Kolosal OCR] Image size (base64): %d bytes\n", len(req.Image))
+	apiKeyPreview := c.APIKey
+	if len(apiKeyPreview) > 10 {
+		apiKeyPreview = apiKeyPreview[:10] + "..."
+	}
+	fmt.Printf("[Kolosal OCR] Authorization: Bearer %s\n", apiKeyPreview)
+
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
+
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		fmt.Printf("[Kolosal OCR] Error: %d - %s\n", resp.StatusCode, string(body))
 		return nil, fmt.Errorf("API error: %d - %s", resp.StatusCode, string(body))
 	}
 
+	fmt.Printf("[Kolosal OCR] Success: %d\n", resp.StatusCode)
+
 	var ocrResp OCRResponse
-	if err := json.NewDecoder(resp.Body).Decode(&ocrResp); err != nil {
+	if err := json.Unmarshal(body, &ocrResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 

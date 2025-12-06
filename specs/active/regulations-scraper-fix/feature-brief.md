@@ -1,163 +1,142 @@
-# Regulations Scraper URL Fix & KB Integration Feature Brief
+# Regulations Scraper v2 - AI-Powered UMKM Regulation Discovery
 
 ## 🎯 Context (2min)
-**Problem**: Current regulations scraper crawls from wrong URL pattern (`/peraturan?page=N`) instead of the actual search endpoint (`/cariglobal?PeraturanSearch%5Bidglobal%5D=`). This causes the scraper to miss regulations or fail to discover them correctly. Additionally, regulations need to be stored in the Knowledge Base (KB) with proper business categorization for UMKM relevance.
+**Problem**: Current regulations scraper is non-functional - uses wrong URL pattern, never triggered, and database has 0 regulations. UMKM users need relevant Indonesian government regulations for compliance guidance. The RAG system has no data to search.
 
 **Users**: 
-- System administrators (trigger scraping jobs)
+- UMKM business owners (need compliance guidance)
 - AI Assistant / RAG system (retrieve regulations for insights)
-- UMKM users (benefit from relevant regulation insights)
+- System administrators (trigger and monitor scraping)
 
-**Success**: Regulations successfully scraped from correct search endpoint, stored in KB with proper categorization, and filtered for UMKM business relevance. Scraper can discover and process regulations reliably.
+**Success**: Regulations KB populated with UMKM-relevant Indonesian regulations, searchable via RAG, with AI-generated summaries in Bahasa Indonesia.
 
 ## 🔍 Quick Research (15min)
 
-### Existing Patterns
+### Existing Infrastructure
+- **Exa.ai Client** (`backend/services/exa/client.go`) - Already integrated, can search web
+- **OpenRouter Embeddings** (`backend/services/embedding/openrouter.go`) - Already configured
+- **Chat Provider** - Can generate keywords and summaries via AI
+- **Database Tables** - `regulations`, `regulation_chunks`, `regulation_embeddings` exist but empty
+- **PDF Extractor** (`backend/services/scraper/regulations/extract.go`) - Has OCR via Kolosal
 
-**Current Crawler Implementation** (`backend/services/scraper/regulations/crawler.go`):
-- Uses `{baseURL}/peraturan?page={n}` pattern
-- Parses HTML with goquery
-- Extracts regulation links with selector `a[href*='/peraturan/']`
-- Crawls detail pages to get PDF URLs and metadata
-- **Issue**: Wrong URL pattern, may not match actual site structure
+### New Approach (vs Original)
+| Original | Enhanced v2 |
+|----------|-------------|
+| Crawl peraturan.go.id only | Multi-source: Exa.ai + official site |
+| Manual keyword selection | AI generates UMKM keywords (Bahasa) |
+| Store PDF URLs | Download PDF → OCR → AI Summary → Delete |
+| No fallback for missing PDFs | Exa.ai search for regulation content |
+| No embeddings | Generate embeddings for RAG |
 
-**KB Storage Pattern** (`backend/services/scraper/regulations/store.go`):
-- Uses deduplication via hash (regulation_number + year + PDF URL)
-- Stores in `regulations` table
-- Creates sections and chunks for RAG
-- **Reuse**: Keep deduplication logic, enhance with business categorization
-
-**Regulation Data Model** (`database/migrations/005_regulations_kb.sql`):
-- Tables: `regulations`, `regulation_sections`, `regulation_chunks`, `regulation_sources`
-- Fields: title, regulation_number, year, category, status, source_url, pdf_url
-- **Enhancement needed**: Business relevance categorization
-
-**Scheduler Pattern** (`backend/services/scraper/regulations/scheduler.go`):
-- Runs jobs with maxPages parameter
-- Processes regulations sequentially
-- **Reuse**: Keep job structure, update crawler call
-
-### Tech Decision
-
-**Approach**: 
-1. Update crawler to use search endpoint `https://peraturan.go.id/cariglobal?PeraturanSearch%5Bidglobal%5D=`
-2. Parse search results HTML structure (need to analyze actual page)
-3. Extract regulation metadata from search result items
-4. Apply business categorization logic for UMKM relevance
-5. Store in existing KB structure with enhanced categorization
-
-**Why**: 
-- Search endpoint is the correct way to discover regulations
-- Reuse existing storage and chunking infrastructure
-- Business categorization ensures UMKM-relevant regulations are prioritized
-
-**Avoid**: 
-- Don't create new storage tables (reuse existing)
-- Don't change chunking logic (works fine)
-- Don't remove deduplication (critical for data quality)
-
-## ✅ Requirements (10min)
+## ✅ Requirements
 
 ### Core Requirements
 
-1. **Update Crawler URL Pattern**
-   - **Story**: As a system admin, I need the scraper to use the correct search endpoint
-   - **Acceptance**: Crawler uses `https://peraturan.go.id/cariglobal?PeraturanSearch%5Bidglobal%5D=` with proper pagination
-   - **Files**: `backend/services/scraper/regulations/crawler.go`
+1. **AI Keyword Generation**
+   - Generate 20-30 UMKM-relevant search keywords in Bahasa Indonesia
+   - Categories: pajak, perizinan, ketenagakerjaan, keamanan pangan, HAKI, ekspor/impor
+   - Use OpenRouter AI to create contextual keywords
 
-2. **Parse Search Results**
-   - **Story**: As a scraper, I need to extract regulation metadata from search results page
-   - **Acceptance**: Successfully extracts title, regulation number, year, category, PDF URL from search result items
-   - **Files**: `backend/services/scraper/regulations/crawler.go`
+2. **Multi-Source Content Discovery**
+   - **Exa.ai Search**: Search for regulation articles using generated keywords
+   - **Official Site**: Crawl peraturan.go.id for official regulation PDFs
+   - Deduplicate across sources
 
-3. **Business Categorization**
-   - **Story**: As UMKM users, I need regulations filtered for business relevance
-   - **Acceptance**: Regulations categorized by UMKM relevance (tax, employment, food safety, import/export, etc.)
-   - **Files**: `backend/services/scraper/regulations/store.go`, possibly new categorization logic
+3. **Content Processing**
+   - **With PDF**: Download → Extract text (or OCR if scanned) → AI Summary → Delete PDF
+   - **Without PDF**: Use Exa.ai content directly → AI Summary
+   - Generate both full text and concise summary
 
-4. **KB Storage with Categorization**
-   - **Story**: As the RAG system, I need regulations stored with business categories
-   - **Acceptance**: Regulations stored in KB with proper category tags for filtering
-   - **Files**: `backend/services/scraper/regulations/store.go`
+4. **Storage & Embedding**
+   - Store regulation metadata + content in `regulations` table
+   - Chunk content into `regulation_chunks`
+   - Generate embeddings via OpenRouter → store in `embeddings` table
+   - Link via `regulation_embeddings`
 
-5. **Maintain Deduplication**
-   - **Story**: As a system, I need to avoid duplicate regulations
-   - **Acceptance**: Existing hash-based deduplication continues to work
-   - **Files**: `backend/services/scraper/regulations/store.go` (no changes needed)
+5. **UMKM Relevance Filtering**
+   - AI categorizes regulations by UMKM relevance
+   - Categories: `pajak`, `perizinan`, `ketenagakerjaan`, `pangan`, `haki`, `ekspor_impor`, `umum`
 
-### Nice-to-Have
+## 🏗️ Implementation
 
-- Configurable search parameters (keywords, date ranges)
-- Better error handling for search page structure changes
-- Rate limiting specific to search endpoint
+### Architecture
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Regulation Scraper v2                     │
+├─────────────────────────────────────────────────────────────┤
+│  1. KeywordGenerator                                         │
+│     └─ AI → UMKM keywords (Bahasa Indonesia)                 │
+│                                                              │
+│  2. ContentDiscovery                                         │
+│     ├─ ExaSearch → regulation articles                       │
+│     └─ OfficialCrawler → peraturan.go.id                     │
+│                                                              │
+│  3. ContentProcessor                                         │
+│     ├─ PDFProcessor: Download → OCR → Summary → Delete       │
+│     └─ WebProcessor: Exa content → Summary                   │
+│                                                              │
+│  4. StorageService                                           │
+│     └─ Store → Chunk → Embed → Link                          │
+└─────────────────────────────────────────────────────────────┘
+```
 
-## 🏗️ Implementation (5min)
+### Files to Modify/Create
+- `backend/services/scraper/regulations/keywords.go` (NEW) - AI keyword generator
+- `backend/services/scraper/regulations/discovery.go` (NEW) - Multi-source discovery
+- `backend/services/scraper/regulations/processor.go` (NEW) - Content processor
+- `backend/services/scraper/regulations/scheduler.go` - Update job orchestration
+- `backend/services/scraper/regulations/store.go` - Add embedding integration
 
-### Components
+### Dependencies
+- Exa.ai client (existing)
+- OpenRouter chat provider (existing)
+- OpenRouter embeddings (existing)
+- Kolosal OCR (existing)
 
-**Modified Files:**
-- `backend/services/scraper/regulations/crawler.go`
-  - Update `CrawlRegulations()` to use search endpoint
-  - Update `crawlListingPage()` to parse search results HTML
-  - May need new `parseSearchResult()` helper function
+## 📋 Next Actions
 
-- `backend/services/scraper/regulations/store.go`
-  - Add business categorization logic
-  - Enhance `UpsertRegulation()` to apply categories
-  - Possibly add `CategorizeRegulation()` helper
+1. **Implement KeywordGenerator** (30min)
+   - Create `keywords.go` with AI-powered keyword generation
+   - Generate UMKM-specific keywords in Bahasa Indonesia
 
-**New Files (if needed):**
-- `backend/services/scraper/regulations/categorizer.go` (optional)
-  - Business categorization rules
-  - UMKM relevance filtering
+2. **Implement Exa Search Integration** (1h)
+   - Create `discovery.go` with Exa.ai search
+   - Search for regulations using generated keywords
 
-### APIs
-- No new API endpoints
-- Uses existing `/api/v1/regulations/scrape` endpoint
+3. **Implement Content Processor** (1h)
+   - Create `processor.go` for PDF and web content
+   - PDF: Download → OCR → AI Summary → Delete
+   - Web: Extract content → AI Summary
 
-### Data
-- **Regulations table**: May need to enhance `category` field usage
-- **No schema changes**: Use existing structure, enhance categorization logic
+4. **Update Storage with Embeddings** (1h)
+   - Modify `store.go` to generate and store embeddings
+   - Chunk content properly for RAG
 
-## 📋 Next Actions (2min)
+5. **Update Scheduler** (30min)
+   - Orchestrate new pipeline
+   - Add job status tracking
 
-- [ ] Analyze search page HTML structure at `https://peraturan.go.id/cariglobal?PeraturanSearch%5Bidglobal%5D=` (30min)
-  - Identify search result item selectors
-  - Understand pagination mechanism
-  - Document HTML structure
-  
-- [ ] Update crawler to use search endpoint (2h)
-  - Modify `CrawlRegulations()` method
-  - Update `crawlListingPage()` to parse search results
-  - Test with sample search queries
-
-- [ ] Implement business categorization logic (2h)
-  - Define UMKM-relevant categories
-  - Create categorization rules
-  - Apply during storage
-
-- [ ] Test end-to-end scraping flow (1h)
-  - Run scraper with search endpoint
-  - Verify regulations stored correctly
-  - Check categorization applied
-
-**Start Coding In**: After brief approval and HTML structure analysis
+6. **Test End-to-End** (30min)
+   - Trigger scraper
+   - Verify regulations in DB
+   - Test RAG search
 
 ---
-**Total Planning Time**: ~30min | **Owner**: Development Team | 2025-12-05
+**Total Planning Time**: ~30min | **Owner**: Development Team | 2025-12-06
 
-<!-- Living Document - Update as you code -->
+## Changelog
 
-## 🔄 Implementation Tracking
+### 2025-12-06 - Major Architecture Overhaul
+**Change:** Complete redesign from simple crawler to AI-powered multi-source discovery
+**Reason:** Original approach non-functional, need AI assistance for keyword generation and content summarization
+**Impact:** New files created, existing scheduler rewritten, embedding integration added
 
-**CRITICAL**: Follow the todo-list systematically. Mark items as complete, document blockers, update progress.
+### Key Additions:
+- AI keyword generation (Bahasa Indonesia)
+- Exa.ai as alternative content source
+- PDF → OCR → AI Summary → Delete pipeline
+- Embedding generation for RAG
+- UMKM relevance categorization
 
-### Progress
-- [ ] Track completed items here
-- [ ] Update daily
-
-### Blockers
-- [ ] Need to analyze actual search page HTML structure
-- [ ] May need to understand search pagination mechanism
-
-**See**: [.sdd/IMPLEMENTATION_GUIDE.md](mdc:.sdd/IMPLEMENTATION_GUIDE.md) for detailed execution rules.
+---
+**See**: [todo-list.md](./todo-list.md) for detailed implementation tasks
