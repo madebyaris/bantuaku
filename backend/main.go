@@ -204,6 +204,7 @@ func main() {
 		mux.HandleFunc("POST /api/v1/prediction/start", middleware.Auth(cfg.JWTSecret, predictionHandler.StartPrediction))
 		mux.HandleFunc("GET /api/v1/prediction/status", middleware.Auth(cfg.JWTSecret, predictionHandler.GetStatus))
 		mux.HandleFunc("GET /api/v1/prediction/results", middleware.Auth(cfg.JWTSecret, predictionHandler.GetLatestResults))
+		mux.HandleFunc("GET /api/v1/prediction/usage", middleware.Auth(cfg.JWTSecret, predictionHandler.GetUsage))
 	}
 
 	// Regulations scraper (admin endpoints) - with rate limiting

@@ -229,6 +229,36 @@ func (h *PredictionHandler) GetLatestResults(w http.ResponseWriter, r *http.Requ
 	})
 }
 
+// PredictionUsageResponse represents the prediction usage info
+type PredictionUsageResponse struct {
+	Used      int  `json:"used"`
+	Limit     int  `json:"limit"`
+	Remaining int  `json:"remaining"`
+	Unlimited bool `json:"unlimited"`
+}
+
+// GetUsage returns prediction usage information for the current company
+func (h *PredictionHandler) GetUsage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logger.With("request_id", ctx.Value("request_id"))
+
+	companyID := middleware.GetCompanyID(ctx)
+	if companyID == "" {
+		log.Error("Company ID not found in context")
+		predictionRespondError(w, errors.NewUnauthorizedError("Company not found"), r)
+		return
+	}
+
+	usage, err := h.service.GetPredictionUsage(ctx, companyID)
+	if err != nil {
+		log.Error("Failed to get prediction usage", "error", err)
+		predictionRespondError(w, errors.NewInternalError(err, "Failed to get usage info"), r)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, usage)
+}
+
 // formatMissing formats the missing fields into a readable string
 func formatMissing(missing []string) string {
 	if len(missing) == 0 {
@@ -254,4 +284,3 @@ func formatMissing(missing []string) string {
 	}
 	return result
 }
-

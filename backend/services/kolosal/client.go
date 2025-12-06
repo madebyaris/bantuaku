@@ -213,7 +213,7 @@ func (c *Client) OCR(ctx context.Context, req OCRRequest) (*OCRResponse, error) 
 
 	// Debug logging
 	fmt.Printf("[Kolosal OCR] Request URL: %s\n", url)
-	fmt.Printf("[Kolosal OCR] Image size (base64): %d bytes\n", len(req.Image))
+	fmt.Printf("[Kolosal OCR] Image size (base64): %d bytes\n", len(req.ImageData))
 	apiKeyPreview := c.APIKey
 	if len(apiKeyPreview) > 10 {
 		apiKeyPreview = apiKeyPreview[:10] + "..."

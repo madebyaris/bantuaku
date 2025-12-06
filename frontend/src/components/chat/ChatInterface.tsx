@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useChatStore, ChatMessage } from '@/state/chat'
-import { api, PredictionCompleteness } from '@/lib/api'
+import { api, PredictionCompleteness, PredictionUsage } from '@/lib/api'
 
 interface ChatInterfaceProps {
   isWidget?: boolean
@@ -33,17 +33,20 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
   
   // Prediction CTA state
   const [completeness, setCompleteness] = useState<PredictionCompleteness | null>(null)
+  const [predictionUsage, setPredictionUsage] = useState<PredictionUsage | null>(null)
   const [showPredictCTA, setShowPredictCTA] = useState(false)
   const [startingPrediction, setStartingPrediction] = useState(false)
 
   // Check completeness after messages update
   const checkCompleteness = useCallback(async () => {
     try {
-      const [compData, statusData] = await Promise.all([
+      const [compData, statusData, usageData] = await Promise.all([
         api.prediction.checkCompleteness(),
         api.prediction.status(),
+        api.prediction.usage(),
       ])
       setCompleteness(compData)
+      setPredictionUsage(usageData)
       // Show CTA if complete and no active job
       if (compData.is_complete && !statusData.has_active_job) {
         setShowPredictCTA(true)
@@ -311,12 +314,23 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
               </div>
               <div>
                 <p className="text-sm font-medium text-slate-100">Profil bisnis lengkap!</p>
-                <p className="text-xs text-slate-400">Siap untuk analisis mendalam</p>
+                <p className="text-xs text-slate-400">
+                  Siap untuk analisis mendalam
+                  {predictionUsage && !predictionUsage.unlimited && (
+                    <span className={cn(
+                      "ml-2",
+                      predictionUsage.remaining <= 2 ? 'text-amber-400' : 'text-slate-400',
+                      predictionUsage.remaining === 0 && 'text-red-400'
+                    )}>
+                      • {predictionUsage.remaining} tersisa
+                    </span>
+                  )}
+                </p>
               </div>
             </div>
             <Button
               onClick={handleStartPrediction}
-              disabled={startingPrediction}
+              disabled={startingPrediction || (predictionUsage?.remaining === 0 && !predictionUsage?.unlimited)}
               className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.3)]"
             >
               {startingPrediction ? (

@@ -276,6 +276,7 @@ export const api = {
       return request<PredictionStatus>(`/prediction/status${params.toString() ? '?' + params.toString() : ''}`)
     },
     results: () => request<PredictionResults>('/prediction/results'),
+    usage: () => request<PredictionUsage>('/prediction/usage'),
   },
   
   files: {
@@ -756,4 +757,11 @@ export interface PredictionResults {
   completed_at?: string
   results?: PredictionResultData
   message?: string
+}
+
+export interface PredictionUsage {
+  used: number
+  limit: number
+  remaining: number
+  unlimited: boolean
 }

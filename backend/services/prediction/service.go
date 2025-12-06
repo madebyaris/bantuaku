@@ -221,6 +221,60 @@ func (s *Service) GetJob(ctx context.Context, jobID string) (*Job, error) {
 	return &job, nil
 }
 
+// PredictionUsage represents usage stats for predictions
+type PredictionUsage struct {
+	Used      int  `json:"used"`
+	Limit     int  `json:"limit"`
+	Remaining int  `json:"remaining"`
+	Unlimited bool `json:"unlimited"`
+}
+
+// GetPredictionUsage returns the prediction usage for a company
+func (s *Service) GetPredictionUsage(ctx context.Context, companyID string) (*PredictionUsage, error) {
+	limits, err := s.usageService.GetPlanLimits(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Count prediction jobs this month
+	now := time.Now()
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+
+	var used int
+	err = s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) 
+		FROM prediction_jobs 
+		WHERE company_id = $1 
+		AND created_at >= $2
+	`, companyID, monthStart).Scan(&used)
+	if err != nil {
+		used = 0
+	}
+
+	// If no limit set, it's unlimited
+	if limits.MaxForecastRefreshesPerMonth == nil {
+		return &PredictionUsage{
+			Used:      used,
+			Limit:     0,
+			Remaining: 999, // Large number for UI
+			Unlimited: true,
+		}, nil
+	}
+
+	limit := *limits.MaxForecastRefreshesPerMonth
+	remaining := limit - used
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	return &PredictionUsage{
+		Used:      used,
+		Limit:     limit,
+		Remaining: remaining,
+		Unlimited: false,
+	}, nil
+}
+
 // StartJob creates and starts a new prediction job
 func (s *Service) StartJob(ctx context.Context, companyID string) (*Job, error) {
 	// Check usage limits

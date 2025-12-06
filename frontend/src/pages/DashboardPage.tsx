@@ -28,7 +28,7 @@ import {
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { api, DashboardSummary, Sale, PredictionCompleteness, PredictionStatus } from '@/lib/api'
+import { api, DashboardSummary, Sale, PredictionCompleteness, PredictionStatus, PredictionUsage } from '@/lib/api'
 import { formatCurrency, formatPercentage, cn } from '@/lib/utils'
 import { useAuthStore } from '@/state/auth'
 
@@ -41,18 +41,21 @@ export function DashboardPage() {
   // Prediction state
   const [completeness, setCompleteness] = useState<PredictionCompleteness | null>(null)
   const [predictionStatus, setPredictionStatus] = useState<PredictionStatus | null>(null)
+  const [predictionUsage, setPredictionUsage] = useState<PredictionUsage | null>(null)
   const [startingPrediction, setStartingPrediction] = useState(false)
   const [predictionError, setPredictionError] = useState<string | null>(null)
 
   // Load prediction status
   const loadPredictionStatus = useCallback(async () => {
     try {
-      const [completenessData, statusData] = await Promise.all([
+      const [completenessData, statusData, usageData] = await Promise.all([
         api.prediction.checkCompleteness(),
         api.prediction.status(),
+        api.prediction.usage(),
       ])
       setCompleteness(completenessData)
       setPredictionStatus(statusData)
+      setPredictionUsage(usageData)
     } catch (err) {
       console.error('Failed to load prediction status:', err)
     }
@@ -194,7 +197,7 @@ export function DashboardPage() {
                 {/* Prediction Status/Button */}
                 <div className="mt-4">
                   {completeness?.is_complete ? (
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                       {predictionStatus?.has_active_job ? (
                         <div className="flex items-center gap-2 text-sm text-amber-400">
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -211,7 +214,7 @@ export function DashboardPage() {
                             size="sm"
                             variant="outline"
                             onClick={handleStartPrediction}
-                            disabled={startingPrediction}
+                            disabled={startingPrediction || (predictionUsage?.remaining === 0 && !predictionUsage?.unlimited)}
                             className="ml-2 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
                           >
                             {startingPrediction ? (
@@ -225,7 +228,7 @@ export function DashboardPage() {
                       ) : (
                         <Button
                           onClick={handleStartPrediction}
-                          disabled={startingPrediction}
+                          disabled={startingPrediction || (predictionUsage?.remaining === 0 && !predictionUsage?.unlimited)}
                           className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.3)]"
                         >
                           {startingPrediction ? (
@@ -236,8 +239,23 @@ export function DashboardPage() {
                           Predict It!
                         </Button>
                       )}
+                      {/* Usage indicator */}
+                      {predictionUsage && (
+                        <div className="text-xs text-slate-500">
+                          {predictionUsage.unlimited ? (
+                            <span className="text-emerald-400">∞ Unlimited</span>
+                          ) : (
+                            <span className={cn(
+                              predictionUsage.remaining <= 2 ? 'text-amber-400' : 'text-slate-400',
+                              predictionUsage.remaining === 0 && 'text-red-400'
+                            )}>
+                              {predictionUsage.remaining} prediksi tersisa bulan ini
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {predictionError && (
-                        <div className="flex items-center gap-1 text-sm text-red-400">
+                        <div className="flex items-center gap-1 text-sm text-red-400 w-full mt-1">
                           <AlertCircle className="w-4 h-4" />
                           {predictionError}
                         </div>

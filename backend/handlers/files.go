@@ -142,10 +142,10 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 			fileBytes, err := io.ReadAll(savedFile)
 			if err == nil {
 				imageBase64 := base64.StdEncoding.EncodeToString(fileBytes)
+				imageDataURL := "data:application/pdf;base64," + imageBase64
 
 				_, err := client.OCR(ctx, kolosal.OCRRequest{
-					Image:    imageBase64,
-					Language: "id", // Indonesian
+					ImageData: imageDataURL,
 				})
 
 				if err == nil {
