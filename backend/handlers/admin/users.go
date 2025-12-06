@@ -36,14 +36,14 @@ func NewAdminHandler(db *storage.Postgres, jwtSecret string, auditLogger *audit.
 // User represents a user in admin context
 type User struct {
 	ID                 string    `json:"id"`
+	CompanyID          string    `json:"company_id,omitempty"`
 	Email              string    `json:"email"`
 	Role               string    `json:"role"`
 	Status             string    `json:"status"`
-	CompanyID          string    `json:"company_id,omitempty"` // From companies.id
 	StoreName          string    `json:"store_name"`
 	Industry           string    `json:"industry"`
-	SubscriptionPlan   string    `json:"subscription_plan"`             // From companies.subscription_plan
-	SubscriptionStatus string    `json:"subscription_status,omitempty"` // From subscriptions.status
+	SubscriptionPlan   string    `json:"subscription_plan,omitempty"`
+	SubscriptionStatus string    `json:"subscription_status,omitempty"`
 	CreatedAt          time.Time `json:"created_at"`
 }
 
@@ -103,20 +103,50 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Pool().Query(ctx, `
 		SELECT 
 			u.id, 
+			COALESCE(c.id, '') as company_id,
 			u.email, 
 			COALESCE(u.role, 'user'), 
-			COALESCE(u.status, 'active'),
-			COALESCE(c.id, '') as company_id,
+			COALESCE(u.status, 'active'), 
 			COALESCE(c.name, '') as store_name,
 			COALESCE(c.industry, '') as industry,
-			COALESCE(c.subscription_plan, 'free') as subscription_plan,
-			COALESCE(
-				(SELECT status FROM subscriptions WHERE company_id = c.id AND status = 'active' ORDER BY created_at DESC LIMIT 1),
-				''
-			) as subscription_status,
+			COALESCE(c.plan_name, 'free') as subscription_plan,
+			COALESCE(c.plan_status, '') as subscription_status,
 			u.created_at
 		FROM users u
-		LEFT JOIN companies c ON c.owner_user_id = u.id
+		LEFT JOIN LATERAL (
+			SELECT 
+				c.id,
+				c.name,
+				c.industry,
+				COALESCE(sub.plan_name, c.subscription_plan) as plan_name,
+				COALESCE(sub.status, '') as plan_status,
+				COALESCE(sub.sort_time, c.created_at) as sort_time
+			FROM companies c
+			LEFT JOIN LATERAL (
+				SELECT sp.name AS plan_name, s.status, COALESCE(s.current_period_start, s.updated_at, s.created_at) as sort_time
+				FROM subscriptions s
+				JOIN subscription_plans sp ON sp.id = s.plan_id
+				WHERE s.company_id = c.id
+				ORDER BY 
+					CASE 
+						WHEN s.status = 'active' THEN 0
+						WHEN s.status = 'trialing' THEN 1
+						WHEN s.status = 'past_due' THEN 2
+						WHEN s.status = 'canceled' THEN 3
+						ELSE 4
+					END,
+					sort_time DESC
+				LIMIT 1
+			) sub ON TRUE
+			WHERE c.owner_user_id = u.id
+			ORDER BY 
+				CASE 
+					WHEN COALESCE(sub.plan_name, c.subscription_plan, '') <> '' THEN 0
+					ELSE 1
+				END,
+				COALESCE(sub.sort_time, c.created_at) DESC
+			LIMIT 1
+		) c ON TRUE
 		ORDER BY u.created_at DESC
 		LIMIT $1 OFFSET $2
 	`, limit, offset)
@@ -130,16 +160,9 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	var users []User
 	for rows.Next() {
 		var u User
-		var companyID, subscriptionStatus sql.NullString
-		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.Status, &companyID, &u.StoreName, &u.Industry, &u.SubscriptionPlan, &subscriptionStatus, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.CompanyID, &u.Email, &u.Role, &u.Status, &u.StoreName, &u.Industry, &u.SubscriptionPlan, &u.SubscriptionStatus, &u.CreatedAt); err != nil {
 			h.log.Error("Failed to scan user", "error", err)
 			continue
-		}
-		if companyID.Valid {
-			u.CompanyID = companyID.String
-		}
-		if subscriptionStatus.Valid {
-			u.SubscriptionStatus = subscriptionStatus.String
 		}
 		users = append(users, u)
 	}
@@ -174,28 +197,58 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var u User
-	var storeName, industry, subscriptionPlan sql.NullString
-	var subscriptionStatus sql.NullString
+	var storeName, industry, subscriptionPlan, subscriptionStatus sql.NullString
 	err := h.db.Pool().QueryRow(ctx, `
 		SELECT 
 			u.id, 
+			COALESCE(c.id, '') as company_id,
 			u.email, 
 			COALESCE(u.role, 'user'), 
 			COALESCE(u.status, 'active'),
 			c.name as store_name,
 			c.industry as industry,
-			COALESCE(c.subscription_plan, 'free') as subscription_plan,
-			COALESCE(
-				(SELECT status FROM subscriptions WHERE company_id = c.id AND status = 'active' ORDER BY created_at DESC LIMIT 1),
-				''
-			) as subscription_status,
+			COALESCE(c.plan_name, 'free') as subscription_plan,
+			COALESCE(c.plan_status, '') as subscription_status,
 			u.created_at
 		FROM users u
-		LEFT JOIN companies c ON c.owner_user_id = u.id
+		LEFT JOIN LATERAL (
+			SELECT 
+				c.id,
+				c.name,
+				c.industry,
+				COALESCE(sub.plan_name, c.subscription_plan) as plan_name,
+				COALESCE(sub.status, '') as plan_status,
+				COALESCE(sub.sort_time, c.created_at) as sort_time
+			FROM companies c
+			LEFT JOIN LATERAL (
+				SELECT sp.name AS plan_name, s.status, COALESCE(s.current_period_start, s.updated_at, s.created_at) as sort_time
+				FROM subscriptions s
+				JOIN subscription_plans sp ON sp.id = s.plan_id
+				WHERE s.company_id = c.id
+				ORDER BY 
+					CASE 
+						WHEN s.status = 'active' THEN 0
+						WHEN s.status = 'trialing' THEN 1
+						WHEN s.status = 'past_due' THEN 2
+						WHEN s.status = 'canceled' THEN 3
+						ELSE 4
+					END,
+					sort_time DESC
+				LIMIT 1
+			) sub ON TRUE
+			WHERE c.owner_user_id = u.id
+			ORDER BY 
+				CASE 
+					WHEN COALESCE(sub.plan_name, c.subscription_plan, '') <> '' THEN 0
+					ELSE 1
+				END,
+				COALESCE(sub.sort_time, c.created_at) DESC
+			LIMIT 1
+		) c ON TRUE
 		WHERE u.id = $1
 		ORDER BY COALESCE(c.created_at, '1970-01-01'::timestamp) DESC NULLS LAST
 		LIMIT 1
-	`, userID).Scan(&u.ID, &u.Email, &u.Role, &u.Status, &storeName, &industry, &subscriptionPlan, &subscriptionStatus, &u.CreatedAt)
+	`, userID).Scan(&u.ID, &u.CompanyID, &u.Email, &u.Role, &u.Status, &storeName, &industry, &subscriptionPlan, &subscriptionStatus, &u.CreatedAt)
 	if err != nil {
 		appErr := errors.NewNotFoundError("User not found")
 		h.respondError(w, appErr, r)
@@ -203,10 +256,8 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	}
 	u.StoreName = storeName.String
 	u.Industry = industry.String
-	if subscriptionPlan.Valid {
+	if subscriptionPlan.Valid && subscriptionPlan.String != "" {
 		u.SubscriptionPlan = subscriptionPlan.String
-	} else {
-		u.SubscriptionPlan = "free"
 	}
 	if subscriptionStatus.Valid && subscriptionStatus.String != "" {
 		u.SubscriptionStatus = subscriptionStatus.String
@@ -216,25 +267,22 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	if !storeName.Valid {
 		h.log.Warn("GetUser: No company found for user", "user_id", userID, "email", u.Email)
 		// Try to find any company (even inactive) as fallback
-		var fallbackStoreName, fallbackIndustry, fallbackPlan sql.NullString
+		var fallbackStoreName, fallbackIndustry sql.NullString
 		fallbackErr := h.db.Pool().QueryRow(ctx, `
-			SELECT name, industry, COALESCE(subscription_plan, 'free')
+			SELECT name, industry 
 			FROM companies 
 			WHERE owner_user_id = $1 
 			ORDER BY created_at DESC 
 			LIMIT 1
-		`, userID).Scan(&fallbackStoreName, &fallbackIndustry, &fallbackPlan)
+		`, userID).Scan(&fallbackStoreName, &fallbackIndustry)
 		if fallbackErr == nil && fallbackStoreName.Valid {
 			h.log.Info("GetUser: Found fallback company", "user_id", userID, "store_name", fallbackStoreName.String)
 			u.StoreName = fallbackStoreName.String
 			u.Industry = fallbackIndustry.String
-			if fallbackPlan.Valid {
-				u.SubscriptionPlan = fallbackPlan.String
-			}
 		}
 	}
 
-	h.log.Info("GetUser result", "user_id", userID, "store_name", u.StoreName, "industry", u.Industry, "subscription_plan", u.SubscriptionPlan)
+	h.log.Info("GetUser result", "user_id", userID, "store_name", u.StoreName, "industry", u.Industry)
 
 	h.respondJSON(w, http.StatusOK, u)
 }
@@ -284,11 +332,37 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Clear company-level caches if any (future hook)
+	// No-op for now.
+
 	// Log audit event
 	if h.auditLogger != nil {
 		h.auditLogger.LogResourceAction(ctx, r, audit.ActionUserRoleUpdated, "user", userID, map[string]interface{}{
 			"new_role": req.Role,
 		})
+	}
+
+	// Return updated user payload for UI immediate refresh
+	var updated User
+	err = h.db.Pool().QueryRow(ctx, `
+		SELECT 
+			u.id, 
+			u.email, 
+			COALESCE(u.role, 'user'), 
+			COALESCE(u.status, 'active'), 
+			COALESCE(c.name, '') as store_name,
+			COALESCE(c.industry, '') as industry,
+			u.created_at
+		FROM users u
+		LEFT JOIN companies c ON c.owner_user_id = u.id
+		WHERE u.id = $1
+		ORDER BY u.created_at DESC
+		LIMIT 1
+	`, userID).Scan(&updated.ID, &updated.Email, &updated.Role, &updated.Status, &updated.StoreName, &updated.Industry, &updated.CreatedAt)
+	if err != nil {
+		// fallback to simple message if fetch fails
+		h.respondJSON(w, http.StatusOK, map[string]string{"message": "User role updated successfully"})
+		return
 	}
 
 	h.respondJSON(w, http.StatusOK, map[string]string{"message": "User role updated successfully"})
@@ -504,6 +578,8 @@ type UpdateUserRequest struct {
 	Email     string `json:"email" validate:"required,email"`
 	StoreName string `json:"store_name" validate:"required,max:255"`
 	Industry  string `json:"industry,omitempty" validate:"max:100"`
+	Role      string `json:"role,omitempty" validate:"omitempty,oneof=user admin super_admin"`
+	Status    string `json:"status,omitempty" validate:"omitempty,oneof=active suspended"`
 }
 
 func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
@@ -529,10 +605,30 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, appErr, r)
 		return
 	}
+	req.StoreName = strings.TrimSpace(req.StoreName)
+	req.Industry = strings.TrimSpace(req.Industry)
+
+	// Load current role/status to preserve when not provided
+	var currentRole, currentStatus string
+	err := h.db.Pool().QueryRow(ctx, `SELECT COALESCE(role, 'user'), COALESCE(status, 'active') FROM users WHERE id = $1`, userID).
+		Scan(&currentRole, &currentStatus)
+	if err != nil {
+		appErr := errors.NewNotFoundError("User not found")
+		h.respondError(w, appErr, r)
+		return
+	}
+	role := currentRole
+	status := currentStatus
+	if strings.TrimSpace(req.Role) != "" {
+		role = req.Role
+	}
+	if strings.TrimSpace(req.Status) != "" {
+		status = req.Status
+	}
 
 	// Check if email already exists for another user
 	var existingID string
-	err := h.db.Pool().QueryRow(ctx, `SELECT id FROM users WHERE email = $1 AND id != $2`, req.Email, userID).Scan(&existingID)
+	err = h.db.Pool().QueryRow(ctx, `SELECT id FROM users WHERE email = $1 AND id != $2`, req.Email, userID).Scan(&existingID)
 	if err == nil {
 		appErr := errors.NewConflictError("Email already registered", "")
 		h.respondError(w, appErr, r)
@@ -541,13 +637,44 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	_, err = h.db.Pool().Exec(ctx, `
 		UPDATE users
-		SET email = $1
-		WHERE id = $2
-	`, req.Email, userID)
+		SET email = $1,
+		    role = $2,
+		    status = $3
+		WHERE id = $4
+	`, req.Email, role, status, userID)
 	if err != nil {
 		appErr := errors.NewDatabaseError(err, "update user")
 		h.respondError(w, appErr, r)
 		return
+	}
+
+	// Upsert company (store) data for the user
+	var companyID string
+	err = h.db.Pool().QueryRow(ctx, `SELECT id FROM companies WHERE owner_user_id = $1 LIMIT 1`, userID).Scan(&companyID)
+	if err != nil {
+		// Create company if missing
+		companyID = uuid.New().String()
+		_, cErr := h.db.Pool().Exec(ctx, `
+			INSERT INTO companies (id, owner_user_id, name, industry, subscription_plan, status, created_at)
+			VALUES ($1, $2, $3, $4, 'free', 'active', NOW())
+		`, companyID, userID, req.StoreName, req.Industry)
+		if cErr != nil {
+			appErr := errors.NewDatabaseError(cErr, "create company for user")
+			h.respondError(w, appErr, r)
+			return
+		}
+	} else {
+		// Update existing company
+		_, cErr := h.db.Pool().Exec(ctx, `
+			UPDATE companies
+			SET name = $1, industry = $2
+			WHERE id = $3
+		`, req.StoreName, req.Industry, companyID)
+		if cErr != nil {
+			appErr := errors.NewDatabaseError(cErr, "update company for user")
+			h.respondError(w, appErr, r)
+			return
+		}
 	}
 
 	// Log audit event
@@ -556,10 +683,34 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 			"email":      req.Email,
 			"store_name": req.StoreName,
 			"industry":   req.Industry,
+			"role":       role,
+			"status":     status,
 		})
 	}
 
-	h.respondJSON(w, http.StatusOK, map[string]string{"message": "User updated successfully"})
+	// Return updated user payload for UI refresh
+	var updated User
+	err = h.db.Pool().QueryRow(ctx, `
+		SELECT 
+			u.id, 
+			u.email, 
+			COALESCE(u.role, 'user'), 
+			COALESCE(u.status, 'active'), 
+			COALESCE(c.name, '') as store_name,
+			COALESCE(c.industry, '') as industry,
+			u.created_at
+		FROM users u
+		LEFT JOIN companies c ON c.owner_user_id = u.id
+		WHERE u.id = $1
+		ORDER BY u.created_at DESC
+		LIMIT 1
+	`, userID).Scan(&updated.ID, &updated.Email, &updated.Role, &updated.Status, &updated.StoreName, &updated.Industry, &updated.CreatedAt)
+	if err != nil {
+		h.respondJSON(w, http.StatusOK, map[string]string{"message": "User updated successfully"})
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, updated)
 }
 
 // UpgradeUserSubscription manually upgrades a user's company subscription to pro
