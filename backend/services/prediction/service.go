@@ -8,6 +8,7 @@ import (
 
 	"github.com/bantuaku/backend/logger"
 	"github.com/bantuaku/backend/services/chat"
+	"github.com/bantuaku/backend/services/exa"
 	"github.com/bantuaku/backend/services/forecast"
 	"github.com/bantuaku/backend/services/usage"
 	"github.com/google/uuid"
@@ -85,6 +86,7 @@ type Service struct {
 	chatProvider    chat.ChatProvider
 	forecastService *forecast.Service
 	usageService    *usage.Service
+	exaClient       *exa.Client
 	chatModel       string
 	log             logger.Logger
 }
@@ -95,6 +97,7 @@ func NewService(
 	chatProvider chat.ChatProvider,
 	forecastService *forecast.Service,
 	usageService *usage.Service,
+	exaClient *exa.Client,
 	chatModel string,
 ) *Service {
 	log := logger.Default()
@@ -103,6 +106,7 @@ func NewService(
 		chatProvider:    chatProvider,
 		forecastService: forecastService,
 		usageService:    usageService,
+		exaClient:       exaClient,
 		chatModel:       chatModel,
 		log:             *log,
 	}
@@ -415,24 +419,107 @@ Hanya berikan JSON array, tanpa penjelasan tambahan.`, name, industry, city, pro
 	return keywords, nil
 }
 
-// researchSocialMedia researches social media trends
+// researchSocialMedia researches social media trends using Exa.ai + AI analysis
 func (s *Service) researchSocialMedia(ctx context.Context, companyID string, keywords []string) (map[string]interface{}, error) {
-	prompt := fmt.Sprintf(`Analisis tren media sosial untuk bisnis dengan keyword: %v
+	// Get company info and social media handles for context
+	var name, industry, city, socialMediaStr string
+	err := s.pool.QueryRow(ctx, `
+		SELECT name, COALESCE(industry, ''), COALESCE(city, ''), COALESCE(social_media_handles::text, '{}')
+		FROM companies WHERE id = $1
+	`, companyID).Scan(&name, &industry, &city, &socialMediaStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get company: %w", err)
+	}
 
-Berikan insight tentang:
-1. Platform yang paling relevan
-2. Jenis konten yang trending
-3. Hashtag yang disarankan
-4. Waktu posting terbaik
+	// Parse existing social media platforms
+	var socialMedia map[string]interface{}
+	json.Unmarshal([]byte(socialMediaStr), &socialMedia)
+	platforms := make([]string, 0)
+	for k, v := range socialMedia {
+		if v != nil && v != "" {
+			platforms = append(platforms, k)
+		}
+	}
 
-Format: ringkasan singkat dalam Bahasa Indonesia.`, keywords)
+	// Step 1: Use Exa.ai to search for real social media trends data
+	var exaData string
+	var exaSources []string
+	if s.exaClient != nil && s.exaClient.IsConfigured() {
+		s.log.Info("Searching social media trends with Exa.ai", "industry", industry, "city", city)
+
+		exaResp, err := s.exaClient.SearchSocialMediaTrends(ctx, industry, city, keywords)
+		if err != nil {
+			s.log.Warn("Exa.ai search failed, falling back to AI-only", "error", err)
+		} else if len(exaResp.Results) > 0 {
+			exaData = exa.FormatResultsForAI(exaResp.Results)
+			for _, r := range exaResp.Results {
+				exaSources = append(exaSources, r.URL)
+			}
+			s.log.Info("Exa.ai returned results", "count", len(exaResp.Results))
+		}
+	}
+
+	// Step 2: Build prompt with real data (if available) + AI analysis
+	var prompt string
+	if exaData != "" {
+		prompt = fmt.Sprintf(`Kamu adalah ahli social media marketing untuk UMKM Indonesia.
+
+PROFIL BISNIS:
+- Nama: %s
+- Industri: %s
+- Lokasi: %s
+- Platform aktif: %v
+- Keyword bisnis: %v
+
+DATA TREN TERKINI (dari riset web):
+%s
+
+Berdasarkan profil bisnis dan DATA TREN TERKINI di atas, berikan analisis dan rekomendasi social media:
+
+1. **Platform Prioritas**: Berdasarkan data tren, platform mana yang paling efektif untuk industri %s di %s? Jelaskan dengan mengacu pada data.
+
+2. **Tren Konten Saat Ini**: Jenis konten apa yang sedang trending berdasarkan data? (Reels, carousel, story, live, dll)
+
+3. **Hashtag Relevan**: Berikan 10-15 hashtag yang relevan untuk bisnis ini.
+
+4. **Jadwal Posting Optimal**: Kapan waktu terbaik posting untuk target audience di %s?
+
+5. **Ide Konten**: Berikan 5 ide konten spesifik yang terinspirasi dari tren terkini.
+
+Format jawaban yang actionable dan praktis untuk UMKM. Sebutkan sumber data jika relevan.`,
+			name, industry, city, platforms, keywords, exaData, industry, city, city)
+	} else {
+		// Fallback to AI-only if no Exa data
+		prompt = fmt.Sprintf(`Kamu adalah ahli social media marketing untuk UMKM Indonesia.
+
+PROFIL BISNIS:
+- Nama: %s
+- Industri: %s
+- Lokasi: %s
+- Platform aktif: %v
+- Keyword bisnis: %v
+
+Berdasarkan profil di atas, berikan analisis dan rekomendasi social media:
+
+1. **Platform Prioritas**: Platform mana yang paling efektif untuk industri %s di %s? Jelaskan alasannya.
+
+2. **Tren Konten Saat Ini**: Jenis konten apa yang sedang trending untuk industri ini? (Reels, carousel, story, live, dll)
+
+3. **Hashtag Relevan**: Berikan 10-15 hashtag yang relevan untuk bisnis ini (campuran populer dan niche).
+
+4. **Jadwal Posting Optimal**: Kapan waktu terbaik posting untuk target audience di %s?
+
+5. **Ide Konten**: Berikan 5 ide konten spesifik yang bisa langsung dieksekusi.
+
+Format jawaban yang actionable dan praktis untuk UMKM.`, name, industry, city, platforms, keywords, industry, city, city)
+	}
 
 	resp, err := s.chatProvider.CreateChatCompletion(ctx, chat.ChatCompletionRequest{
 		Model: s.chatModel,
 		Messages: []chat.ChatCompletionMessage{
 			{Role: "user", Content: prompt},
 		},
-		MaxTokens:   1000,
+		MaxTokens:   1500,
 		Temperature: 0.7,
 	})
 	if err != nil {
@@ -443,10 +530,23 @@ Format: ringkasan singkat dalam Bahasa Indonesia.`, keywords)
 		return nil, fmt.Errorf("no response from AI")
 	}
 
-	return map[string]interface{}{
-		"analysis": resp.Choices[0].Message.Content,
-		"keywords": keywords,
-	}, nil
+	result := map[string]interface{}{
+		"analysis":  resp.Choices[0].Message.Content,
+		"keywords":  keywords,
+		"platforms": platforms,
+		"industry":  industry,
+		"location":  city,
+	}
+
+	// Add sources if we used Exa data
+	if len(exaSources) > 0 {
+		result["sources"] = exaSources
+		result["data_source"] = "exa.ai + AI analysis"
+	} else {
+		result["data_source"] = "AI analysis only"
+	}
+
+	return result, nil
 }
 
 // generateForecastSummary generates forecast for company products
@@ -498,7 +598,7 @@ func (s *Service) generateForecastSummary(ctx context.Context, companyID string)
 	return result, nil
 }
 
-// generateMarketPrediction generates market prediction
+// generateMarketPrediction generates market prediction using Exa.ai + AI analysis
 func (s *Service) generateMarketPrediction(ctx context.Context, companyID string, keywords []string) (string, error) {
 	// Get company info
 	var industry, city string
@@ -510,7 +610,54 @@ func (s *Service) generateMarketPrediction(ctx context.Context, companyID string
 		return "", err
 	}
 
-	prompt := fmt.Sprintf(`Berikan prediksi pasar untuk bisnis di industri "%s" di wilayah "%s".
+	// Step 1: Use Exa.ai to search for real market trends data
+	var exaData string
+	var exaSources []string
+	if s.exaClient != nil && s.exaClient.IsConfigured() {
+		s.log.Info("Searching market trends with Exa.ai", "industry", industry, "city", city)
+
+		exaResp, err := s.exaClient.SearchMarketTrends(ctx, industry, city, keywords)
+		if err != nil {
+			s.log.Warn("Exa.ai market search failed, falling back to AI-only", "error", err)
+		} else if len(exaResp.Results) > 0 {
+			exaData = exa.FormatResultsForAI(exaResp.Results)
+			for _, r := range exaResp.Results {
+				exaSources = append(exaSources, r.URL)
+			}
+			s.log.Info("Exa.ai market search returned results", "count", len(exaResp.Results))
+		}
+	}
+
+	// Step 2: Build prompt with real data (if available) + AI analysis
+	var prompt string
+	if exaData != "" {
+		prompt = fmt.Sprintf(`Kamu adalah analis pasar untuk UMKM Indonesia.
+
+KONTEKS BISNIS:
+- Industri: %s
+- Lokasi: %s
+- Keyword: %v
+
+DATA PASAR TERKINI (dari riset web):
+%s
+
+Berdasarkan DATA PASAR TERKINI di atas, berikan prediksi dan analisis:
+
+1. **Tren Pasar 6 Bulan Ke Depan**: Berdasarkan data, bagaimana proyeksi pasar untuk industri %s?
+
+2. **Peluang Pertumbuhan**: Peluang spesifik apa yang terlihat dari data tren?
+
+3. **Tantangan & Risiko**: Apa tantangan yang mungkin dihadapi berdasarkan kondisi pasar saat ini?
+
+4. **Rekomendasi Strategi**: Langkah konkret apa yang harus diambil UMKM untuk memanfaatkan tren ini?
+
+5. **Kompetitor & Posisi Pasar**: Insight tentang lanskap kompetitif berdasarkan data.
+
+Format: analisis mendalam dalam Bahasa Indonesia. Sebutkan sumber data jika relevan.`,
+			industry, city, keywords, exaData, industry)
+	} else {
+		// Fallback to AI-only
+		prompt = fmt.Sprintf(`Berikan prediksi pasar untuk bisnis di industri "%s" di wilayah "%s".
 
 Keyword terkait: %v
 
@@ -521,13 +668,14 @@ Berikan analisis:
 4. Rekomendasi strategi
 
 Format: ringkasan dalam Bahasa Indonesia, maksimal 300 kata.`, industry, city, keywords)
+	}
 
 	resp, err := s.chatProvider.CreateChatCompletion(ctx, chat.ChatCompletionRequest{
 		Model: s.chatModel,
 		Messages: []chat.ChatCompletionMessage{
 			{Role: "user", Content: prompt},
 		},
-		MaxTokens:   800,
+		MaxTokens:   1200,
 		Temperature: 0.7,
 	})
 	if err != nil {
@@ -538,7 +686,17 @@ Format: ringkasan dalam Bahasa Indonesia, maksimal 300 kata.`, industry, city, k
 		return "", fmt.Errorf("no response from AI")
 	}
 
-	return resp.Choices[0].Message.Content, nil
+	result := resp.Choices[0].Message.Content
+
+	// Add sources if we used Exa data
+	if len(exaSources) > 0 {
+		result += "\n\n---\n📊 Sumber Data:\n"
+		for _, src := range exaSources {
+			result += "• " + src + "\n"
+		}
+	}
+
+	return result, nil
 }
 
 // generateMarketingRecs generates marketing recommendations

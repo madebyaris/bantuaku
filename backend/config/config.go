@@ -37,6 +37,9 @@ type Config struct {
 	MailjetAPIKey    string
 	MailjetAPISecret string
 	AppBaseURL       string
+
+	// Exa.ai search API configuration
+	ExaAPIKey string
 }
 
 // Load reads configuration from environment variables
@@ -67,6 +70,8 @@ func Load() *Config {
 		MailjetAPIKey:    getEnv("MAILJET_API_KEY", ""),
 		MailjetAPISecret: getEnv("MAILJET_API_SECRET", ""),
 		AppBaseURL:       getEnv("APP_BASE_URL", "http://localhost:3000"),
+
+		ExaAPIKey: getEnv("EXA_API_KEY", ""),
 	}
 }
 

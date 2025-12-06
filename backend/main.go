@@ -16,6 +16,7 @@ import (
 	"github.com/bantuaku/backend/services/audit"
 	"github.com/bantuaku/backend/services/billing"
 	"github.com/bantuaku/backend/services/chat"
+	"github.com/bantuaku/backend/services/exa"
 	"github.com/bantuaku/backend/services/forecast"
 	"github.com/bantuaku/backend/services/prediction"
 	"github.com/bantuaku/backend/services/settings"
@@ -75,6 +76,15 @@ func main() {
 		log.Warn("Failed to initialize chat provider for predictions", "error", err)
 	}
 
+	// Initialize Exa.ai client (optional - for enhanced research)
+	var exaClient *exa.Client
+	if cfg.ExaAPIKey != "" {
+		exaClient = exa.NewClient(cfg.ExaAPIKey)
+		log.Info("Exa.ai client initialized")
+	} else {
+		log.Info("Exa.ai not configured (EXA_API_KEY not set) - using AI-only mode for research")
+	}
+
 	// Initialize prediction service and handler
 	var predictionHandler *handlers.PredictionHandler
 	if chatProvider != nil {
@@ -87,7 +97,7 @@ func main() {
 		forecastAdapter := forecast.NewAdapter(cfg.ForecastingServiceURL)
 		forecastService := forecast.NewService(forecastAdapter, db.Pool())
 		usageService := usage.NewService(db)
-		predictionService := prediction.NewService(db.Pool(), chatProvider, forecastService, usageService, chatModel)
+		predictionService := prediction.NewService(db.Pool(), chatProvider, forecastService, usageService, exaClient, chatModel)
 		predictionHandler = handlers.NewPredictionHandler(predictionService)
 		log.Info("Prediction service initialized")
 	}
