@@ -8,6 +8,7 @@ import (
 
 	"github.com/bantuaku/backend/logger"
 	"github.com/bantuaku/backend/services/chat"
+	"github.com/bantuaku/backend/services/embedding"
 	"github.com/bantuaku/backend/services/exa"
 	"github.com/bantuaku/backend/services/forecast"
 	"github.com/bantuaku/backend/services/usage"
@@ -87,6 +88,7 @@ type Service struct {
 	forecastService *forecast.Service
 	usageService    *usage.Service
 	exaClient       *exa.Client
+	embedder        embedding.Embedder
 	chatModel       string
 	log             logger.Logger
 }
@@ -98,6 +100,7 @@ func NewService(
 	forecastService *forecast.Service,
 	usageService *usage.Service,
 	exaClient *exa.Client,
+	embedder embedding.Embedder,
 	chatModel string,
 ) *Service {
 	log := logger.Default()
@@ -107,6 +110,7 @@ func NewService(
 		forecastService: forecastService,
 		usageService:    usageService,
 		exaClient:       exaClient,
+		embedder:        embedder,
 		chatModel:       chatModel,
 		log:             *log,
 	}
@@ -269,7 +273,14 @@ func (s *Service) processJob(jobID, companyID string) {
 	ctx := context.Background()
 	log := s.log.With("job_id", jobID, "company_id", companyID)
 
-	log.Info("Starting prediction job")
+	log.Info("========== PREDICTION JOB STARTED ==========")
+	log.Info("Configuration status",
+		"has_exa_client", s.exaClient != nil,
+		"has_embedder", s.embedder != nil,
+		"chat_model", s.chatModel,
+	)
+
+	startTime := time.Now()
 
 	// Update status to processing
 	now := time.Now()
@@ -279,70 +290,98 @@ func (s *Service) processJob(jobID, companyID string) {
 	var progress Progress
 
 	// Step 1: Generate keywords
-	log.Info("Step 1: Generating keywords")
+	log.Info(">>> STEP 1/6: Generating keywords...")
+	step1Start := time.Now()
 	keywords, err := s.generateKeywords(ctx, companyID)
 	if err != nil {
-		log.Error("Failed to generate keywords", "error", err)
+		log.Error("STEP 1 FAILED", "error", err, "duration_ms", time.Since(step1Start).Milliseconds())
 		s.failJob(ctx, jobID, "Failed to generate keywords: "+err.Error())
 		return
 	}
 	results.Keywords = keywords
 	progress.Keywords = true
 	s.updateJobProgress(ctx, jobID, progress, results)
+	log.Info("<<< STEP 1 COMPLETE", "keywords_count", len(keywords), "keywords", keywords, "duration_ms", time.Since(step1Start).Milliseconds())
 
 	// Step 2: Social media research
-	log.Info("Step 2: Researching social media trends")
+	log.Info(">>> STEP 2/6: Researching social media trends...")
+	step2Start := time.Now()
 	socialTrends, err := s.researchSocialMedia(ctx, companyID, keywords)
 	if err != nil {
-		log.Warn("Social media research failed", "error", err)
+		log.Warn("STEP 2 FAILED (non-fatal)", "error", err, "duration_ms", time.Since(step2Start).Milliseconds())
 		// Non-fatal, continue
 	} else {
 		results.SocialMediaTrends = socialTrends
+		dataSource := "unknown"
+		if ds, ok := socialTrends["data_source"].(string); ok {
+			dataSource = ds
+		}
+		sourcesCount := 0
+		if sources, ok := socialTrends["sources"].([]string); ok {
+			sourcesCount = len(sources)
+		}
+		log.Info("<<< STEP 2 COMPLETE", "data_source", dataSource, "sources_count", sourcesCount, "duration_ms", time.Since(step2Start).Milliseconds())
 	}
 	progress.SocialMedia = true
 	s.updateJobProgress(ctx, jobID, progress, results)
 
 	// Step 3: Generate forecast
-	log.Info("Step 3: Generating forecast")
+	log.Info(">>> STEP 3/6: Generating forecast...")
+	step3Start := time.Now()
 	forecastSummary, err := s.generateForecastSummary(ctx, companyID)
 	if err != nil {
-		log.Warn("Forecast generation failed", "error", err)
+		log.Warn("STEP 3 FAILED (non-fatal)", "error", err, "duration_ms", time.Since(step3Start).Milliseconds())
 		// Non-fatal, continue
 	} else {
 		results.ForecastSummary = forecastSummary
+		log.Info("<<< STEP 3 COMPLETE", "forecast_length", len(forecastSummary), "duration_ms", time.Since(step3Start).Milliseconds())
 	}
 	progress.Forecast = true
 	s.updateJobProgress(ctx, jobID, progress, results)
 
 	// Step 4: Market prediction
-	log.Info("Step 4: Generating market prediction")
+	log.Info(">>> STEP 4/6: Generating market prediction...")
+	step4Start := time.Now()
 	marketPred, err := s.generateMarketPrediction(ctx, companyID, keywords)
 	if err != nil {
-		log.Warn("Market prediction failed", "error", err)
+		log.Warn("STEP 4 FAILED (non-fatal)", "error", err, "duration_ms", time.Since(step4Start).Milliseconds())
 	} else {
 		results.MarketPrediction = marketPred
+		hasExaSources := false
+		if len(marketPred) > 0 && (len(marketPred) > 100 && marketPred[len(marketPred)-50:] != "") {
+			hasExaSources = true // Rough check for sources section
+		}
+		log.Info("<<< STEP 4 COMPLETE", "prediction_length", len(marketPred), "has_sources", hasExaSources, "duration_ms", time.Since(step4Start).Milliseconds())
 	}
 	progress.Market = true
 	s.updateJobProgress(ctx, jobID, progress, results)
 
 	// Step 5: Marketing recommendations
-	log.Info("Step 5: Generating marketing recommendations")
+	log.Info(">>> STEP 5/6: Generating marketing recommendations...")
+	step5Start := time.Now()
 	marketingRecs, err := s.generateMarketingRecs(ctx, companyID, keywords)
 	if err != nil {
-		log.Warn("Marketing recommendations failed", "error", err)
+		log.Warn("STEP 5 FAILED (non-fatal)", "error", err, "duration_ms", time.Since(step5Start).Milliseconds())
 	} else {
 		results.MarketingRecs = marketingRecs
+		log.Info("<<< STEP 5 COMPLETE", "recs_length", len(marketingRecs), "duration_ms", time.Since(step5Start).Milliseconds())
 	}
 	progress.Marketing = true
 	s.updateJobProgress(ctx, jobID, progress, results)
 
 	// Step 6: Government regulations
-	log.Info("Step 6: Fetching relevant regulations")
+	log.Info(">>> STEP 6/6: Fetching relevant regulations...")
+	step6Start := time.Now()
 	regulations, err := s.fetchRegulations(ctx, companyID, keywords)
 	if err != nil {
-		log.Warn("Regulations fetch failed", "error", err)
+		log.Warn("STEP 6 FAILED (non-fatal)", "error", err, "duration_ms", time.Since(step6Start).Milliseconds())
 	} else {
 		results.Regulations = regulations
+		hasRAGSources := false
+		if len(regulations) > 0 && (len(regulations) > 20) {
+			hasRAGSources = true
+		}
+		log.Info("<<< STEP 6 COMPLETE", "regulations_length", len(regulations), "has_rag_sources", hasRAGSources, "duration_ms", time.Since(step6Start).Milliseconds())
 	}
 	progress.Regulations = true
 	s.updateJobProgress(ctx, jobID, progress, results)
@@ -354,11 +393,18 @@ func (s *Service) processJob(jobID, companyID string) {
 	// Send notification
 	s.sendCompletionNotification(ctx, companyID, jobID)
 
-	log.Info("Prediction job completed successfully")
+	totalDuration := time.Since(startTime)
+	log.Info("========== PREDICTION JOB COMPLETED ==========",
+		"total_duration_ms", totalDuration.Milliseconds(),
+		"total_duration_sec", totalDuration.Seconds(),
+		"steps_completed", 6,
+	)
 }
 
 // generateKeywords uses AI to generate relevant keywords for research
 func (s *Service) generateKeywords(ctx context.Context, companyID string) ([]string, error) {
+	s.log.Debug("[generateKeywords] Starting", "company_id", companyID)
+
 	// Get company info
 	var name, industry, city string
 	err := s.pool.QueryRow(ctx, `
@@ -368,6 +414,7 @@ func (s *Service) generateKeywords(ctx context.Context, companyID string) ([]str
 	if err != nil {
 		return nil, err
 	}
+	s.log.Debug("[generateKeywords] Company info", "name", name, "industry", industry, "city", city)
 
 	// Get products
 	rows, err := s.pool.Query(ctx, `
@@ -384,6 +431,7 @@ func (s *Service) generateKeywords(ctx context.Context, companyID string) ([]str
 		rows.Scan(&productName)
 		products = append(products, productName)
 	}
+	s.log.Debug("[generateKeywords] Products found", "count", len(products), "products", products)
 
 	prompt := fmt.Sprintf(`Berdasarkan informasi bisnis berikut, buatkan 5-10 keyword untuk riset pasar dan tren:
 - Nama Perusahaan: %s
@@ -394,6 +442,7 @@ func (s *Service) generateKeywords(ctx context.Context, companyID string) ([]str
 Berikan output dalam format JSON array of strings, contoh: ["keyword1", "keyword2", "keyword3"]
 Hanya berikan JSON array, tanpa penjelasan tambahan.`, name, industry, city, products)
 
+	s.log.Debug("[generateKeywords] Calling AI", "model", s.chatModel)
 	resp, err := s.chatProvider.CreateChatCompletion(ctx, chat.ChatCompletionRequest{
 		Model: s.chatModel,
 		Messages: []chat.ChatCompletionMessage{
@@ -403,6 +452,7 @@ Hanya berikan JSON array, tanpa penjelasan tambahan.`, name, industry, city, pro
 		Temperature: 0.7,
 	})
 	if err != nil {
+		s.log.Error("[generateKeywords] AI call failed", "error", err)
 		return nil, err
 	}
 
@@ -410,8 +460,11 @@ Hanya berikan JSON array, tanpa penjelasan tambahan.`, name, industry, city, pro
 		return nil, fmt.Errorf("no response from AI")
 	}
 
+	s.log.Debug("[generateKeywords] AI response", "content_length", len(resp.Choices[0].Message.Content))
+
 	var keywords []string
 	if err := json.Unmarshal([]byte(resp.Choices[0].Message.Content), &keywords); err != nil {
+		s.log.Warn("[generateKeywords] Failed to parse JSON, using fallback", "error", err, "raw_content", resp.Choices[0].Message.Content[:min(200, len(resp.Choices[0].Message.Content))])
 		// Try to extract from response
 		keywords = []string{industry, city, name}
 	}
@@ -421,6 +474,8 @@ Hanya berikan JSON array, tanpa penjelasan tambahan.`, name, industry, city, pro
 
 // researchSocialMedia researches social media trends using Exa.ai + AI analysis
 func (s *Service) researchSocialMedia(ctx context.Context, companyID string, keywords []string) (map[string]interface{}, error) {
+	s.log.Debug("[researchSocialMedia] Starting", "company_id", companyID, "keywords", keywords)
+
 	// Get company info and social media handles for context
 	var name, industry, city, socialMediaStr string
 	err := s.pool.QueryRow(ctx, `
@@ -430,6 +485,7 @@ func (s *Service) researchSocialMedia(ctx context.Context, companyID string, key
 	if err != nil {
 		return nil, fmt.Errorf("failed to get company: %w", err)
 	}
+	s.log.Debug("[researchSocialMedia] Company info", "name", name, "industry", industry, "city", city)
 
 	// Parse existing social media platforms
 	var socialMedia map[string]interface{}
@@ -440,23 +496,28 @@ func (s *Service) researchSocialMedia(ctx context.Context, companyID string, key
 			platforms = append(platforms, k)
 		}
 	}
+	s.log.Debug("[researchSocialMedia] Platforms", "platforms", platforms)
 
 	// Step 1: Use Exa.ai to search for real social media trends data
 	var exaData string
 	var exaSources []string
 	if s.exaClient != nil && s.exaClient.IsConfigured() {
-		s.log.Info("Searching social media trends with Exa.ai", "industry", industry, "city", city)
+		s.log.Info("[researchSocialMedia] >>> EXA.AI SEARCH STARTING", "industry", industry, "city", city)
 
 		exaResp, err := s.exaClient.SearchSocialMediaTrends(ctx, industry, city, keywords)
 		if err != nil {
-			s.log.Warn("Exa.ai search failed, falling back to AI-only", "error", err)
+			s.log.Warn("[researchSocialMedia] EXA.AI SEARCH FAILED", "error", err)
 		} else if len(exaResp.Results) > 0 {
 			exaData = exa.FormatResultsForAI(exaResp.Results)
 			for _, r := range exaResp.Results {
 				exaSources = append(exaSources, r.URL)
 			}
-			s.log.Info("Exa.ai returned results", "count", len(exaResp.Results))
+			s.log.Info("[researchSocialMedia] <<< EXA.AI SEARCH SUCCESS", "results_count", len(exaResp.Results), "sources", exaSources)
+		} else {
+			s.log.Warn("[researchSocialMedia] EXA.AI returned 0 results")
 		}
+	} else {
+		s.log.Debug("[researchSocialMedia] Exa.ai not configured, using AI-only mode")
 	}
 
 	// Step 2: Build prompt with real data (if available) + AI analysis
@@ -600,6 +661,8 @@ func (s *Service) generateForecastSummary(ctx context.Context, companyID string)
 
 // generateMarketPrediction generates market prediction using Exa.ai + AI analysis
 func (s *Service) generateMarketPrediction(ctx context.Context, companyID string, keywords []string) (string, error) {
+	s.log.Debug("[generateMarketPrediction] Starting", "company_id", companyID, "keywords", keywords)
+
 	// Get company info
 	var industry, city string
 	err := s.pool.QueryRow(ctx, `
@@ -609,23 +672,28 @@ func (s *Service) generateMarketPrediction(ctx context.Context, companyID string
 	if err != nil {
 		return "", err
 	}
+	s.log.Debug("[generateMarketPrediction] Company info", "industry", industry, "city", city)
 
 	// Step 1: Use Exa.ai to search for real market trends data
 	var exaData string
 	var exaSources []string
 	if s.exaClient != nil && s.exaClient.IsConfigured() {
-		s.log.Info("Searching market trends with Exa.ai", "industry", industry, "city", city)
+		s.log.Info("[generateMarketPrediction] >>> EXA.AI MARKET SEARCH STARTING", "industry", industry, "city", city)
 
 		exaResp, err := s.exaClient.SearchMarketTrends(ctx, industry, city, keywords)
 		if err != nil {
-			s.log.Warn("Exa.ai market search failed, falling back to AI-only", "error", err)
+			s.log.Warn("[generateMarketPrediction] EXA.AI MARKET SEARCH FAILED", "error", err)
 		} else if len(exaResp.Results) > 0 {
 			exaData = exa.FormatResultsForAI(exaResp.Results)
 			for _, r := range exaResp.Results {
 				exaSources = append(exaSources, r.URL)
 			}
-			s.log.Info("Exa.ai market search returned results", "count", len(exaResp.Results))
+			s.log.Info("[generateMarketPrediction] <<< EXA.AI MARKET SEARCH SUCCESS", "results_count", len(exaResp.Results), "sources", exaSources)
+		} else {
+			s.log.Warn("[generateMarketPrediction] EXA.AI returned 0 market results")
 		}
+	} else {
+		s.log.Debug("[generateMarketPrediction] Exa.ai not configured, using AI-only mode")
 	}
 
 	// Step 2: Build prompt with real data (if available) + AI analysis
@@ -752,6 +820,8 @@ Format: ringkasan dalam Bahasa Indonesia, actionable dan praktis.`, platforms, k
 
 // fetchRegulations fetches relevant government regulations
 func (s *Service) fetchRegulations(ctx context.Context, companyID string, keywords []string) (string, error) {
+	s.log.Debug("[fetchRegulations] Starting", "company_id", companyID, "keywords", keywords)
+
 	// Get company industry
 	var industry string
 	err := s.pool.QueryRow(ctx, `
@@ -760,8 +830,26 @@ func (s *Service) fetchRegulations(ctx context.Context, companyID string, keywor
 	if err != nil {
 		return "", err
 	}
+	s.log.Debug("[fetchRegulations] Industry", "industry", industry)
 
-	// Search regulations knowledge base
+	// Try RAG with vector search first (if embedder is configured)
+	var ragContext string
+	var ragSources []string
+	if s.embedder != nil {
+		s.log.Info("[fetchRegulations] >>> RAG VECTOR SEARCH STARTING", "industry", industry, "has_embedder", true)
+		ragContext, ragSources = s.searchRegulationsRAG(ctx, industry, keywords)
+	} else {
+		s.log.Debug("[fetchRegulations] Embedder not configured, skipping RAG")
+	}
+
+	// If RAG found results, use AI to analyze them
+	if ragContext != "" {
+		s.log.Info("[fetchRegulations] <<< RAG FOUND RESULTS", "sources_count", len(ragSources), "context_length", len(ragContext))
+		return s.generateRegulationsWithRAG(ctx, industry, keywords, ragContext, ragSources)
+	}
+	s.log.Debug("[fetchRegulations] RAG returned no results, falling back to text search")
+
+	// Fallback to text search
 	var regulations []string
 	rows, err := s.pool.Query(ctx, `
 		SELECT title, summary
@@ -770,6 +858,7 @@ func (s *Service) fetchRegulations(ctx context.Context, companyID string, keywor
 		LIMIT 5
 	`, industry)
 	if err != nil {
+		s.log.Debug("[fetchRegulations] Text search failed, using AI-only", "error", err)
 		// If regulations table doesn't exist or query fails, use AI
 		return s.generateRegulationsAdvice(ctx, industry, keywords)
 	}
@@ -780,8 +869,10 @@ func (s *Service) fetchRegulations(ctx context.Context, companyID string, keywor
 		rows.Scan(&title, &summary)
 		regulations = append(regulations, fmt.Sprintf("- %s: %s", title, summary))
 	}
+	s.log.Debug("[fetchRegulations] Text search results", "count", len(regulations))
 
 	if len(regulations) == 0 {
+		s.log.Debug("[fetchRegulations] No text search results, using AI-only")
 		return s.generateRegulationsAdvice(ctx, industry, keywords)
 	}
 
@@ -789,6 +880,134 @@ func (s *Service) fetchRegulations(ctx context.Context, companyID string, keywor
 	for _, r := range regulations {
 		result += r + "\n"
 	}
+	return result, nil
+}
+
+// searchRegulationsRAG uses vector search to find relevant regulations
+func (s *Service) searchRegulationsRAG(ctx context.Context, industry string, keywords []string) (string, []string) {
+	s.log.Debug("[searchRegulationsRAG] Starting RAG search", "industry", industry, "keywords", keywords)
+
+	// Build query for vector search
+	query := fmt.Sprintf("regulasi perizinan UMKM %s Indonesia", industry)
+	if len(keywords) > 0 {
+		query += " " + keywords[0]
+	}
+	s.log.Debug("[searchRegulationsRAG] Query", "query", query)
+
+	// Generate query embedding
+	s.log.Debug("[searchRegulationsRAG] Generating embedding...")
+	queryEmbed, err := s.embedder.Embed(ctx, query)
+	if err != nil {
+		s.log.Warn("[searchRegulationsRAG] EMBEDDING GENERATION FAILED", "error", err)
+		return "", nil
+	}
+	s.log.Debug("[searchRegulationsRAG] Embedding generated", "dimension", len(queryEmbed))
+
+	// Convert to pgvector format string for query
+	vectorStr := "["
+	for i, v := range queryEmbed {
+		if i > 0 {
+			vectorStr += ","
+		}
+		vectorStr += fmt.Sprintf("%f", v)
+	}
+	vectorStr += "]"
+
+	// Perform vector search on regulation_chunks + embeddings
+	s.log.Debug("[searchRegulationsRAG] Executing vector search query...")
+	rows, err := s.pool.Query(ctx, `
+		SELECT rc.content, r.title, r.source_url,
+		       1 - (e.embedding <=> $1::vector) AS similarity
+		FROM regulation_chunks rc
+		JOIN regulation_embeddings re ON re.chunk_id = rc.id
+		JOIN embeddings e ON e.id = re.embedding_id
+		JOIN regulations r ON r.id = rc.regulation_id
+		WHERE 1 - (e.embedding <=> $1::vector) > 0.5
+		ORDER BY e.embedding <=> $1::vector
+		LIMIT 5
+	`, vectorStr)
+	if err != nil {
+		s.log.Warn("[searchRegulationsRAG] VECTOR SEARCH QUERY FAILED", "error", err)
+		return "", nil
+	}
+	defer rows.Close()
+
+	var context string
+	var sources []string
+	seenSources := make(map[string]bool)
+	resultCount := 0
+
+	for rows.Next() {
+		var content, title, sourceURL string
+		var similarity float64
+		if err := rows.Scan(&content, &title, &sourceURL, &similarity); err != nil {
+			s.log.Warn("[searchRegulationsRAG] Failed to scan row", "error", err)
+			continue
+		}
+		resultCount++
+		s.log.Debug("[searchRegulationsRAG] Found result", "title", title, "similarity", similarity, "content_length", len(content))
+
+		context += fmt.Sprintf("\n--- %s (similarity: %.2f) ---\n%s\n", title, similarity, content)
+
+		if sourceURL != "" && !seenSources[sourceURL] {
+			sources = append(sources, sourceURL)
+			seenSources[sourceURL] = true
+		}
+	}
+
+	s.log.Debug("[searchRegulationsRAG] Vector search complete", "results_found", resultCount, "sources_count", len(sources))
+	return context, sources
+}
+
+// generateRegulationsWithRAG generates regulations advice using RAG context
+func (s *Service) generateRegulationsWithRAG(ctx context.Context, industry string, keywords []string, ragContext string, sources []string) (string, error) {
+	prompt := fmt.Sprintf(`Kamu adalah konsultan regulasi untuk UMKM Indonesia.
+
+KONTEKS BISNIS:
+- Industri: %s
+- Keyword: %v
+
+DATA REGULASI DARI DATABASE (gunakan ini sebagai sumber utama):
+%s
+
+Berdasarkan DATA REGULASI di atas, berikan panduan yang spesifik dan actionable:
+
+1. **Perizinan Wajib**: Izin apa saja yang wajib dimiliki berdasarkan regulasi di atas?
+
+2. **Regulasi yang Harus Dipatuhi**: Sebutkan regulasi spesifik dan poin pentingnya.
+
+3. **Langkah-langkah Kepatuhan**: Berikan checklist praktis untuk UMKM.
+
+4. **Peringatan**: Hal-hal yang perlu dihindari atau diperhatikan.
+
+Format: praktis dan mudah dipahami untuk pemilik UMKM. Sebutkan nomor/nama regulasi jika ada.`, industry, keywords, ragContext)
+
+	resp, err := s.chatProvider.CreateChatCompletion(ctx, chat.ChatCompletionRequest{
+		Model: s.chatModel,
+		Messages: []chat.ChatCompletionMessage{
+			{Role: "user", Content: prompt},
+		},
+		MaxTokens:   1200,
+		Temperature: 0.7,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no response from AI")
+	}
+
+	result := resp.Choices[0].Message.Content
+
+	// Add sources
+	if len(sources) > 0 {
+		result += "\n\n---\n📋 Sumber Regulasi:\n"
+		for _, src := range sources {
+			result += "• " + src + "\n"
+		}
+	}
+
 	return result, nil
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/bantuaku/backend/services/audit"
 	"github.com/bantuaku/backend/services/billing"
 	"github.com/bantuaku/backend/services/chat"
+	"github.com/bantuaku/backend/services/embedding"
 	"github.com/bantuaku/backend/services/exa"
 	"github.com/bantuaku/backend/services/forecast"
 	"github.com/bantuaku/backend/services/prediction"
@@ -85,6 +86,16 @@ func main() {
 		log.Info("Exa.ai not configured (EXA_API_KEY not set) - using AI-only mode for research")
 	}
 
+	// Initialize embedder for RAG (optional)
+	var embedder embedding.Embedder
+	embedder, err = embedding.NewEmbedder(cfg)
+	if err != nil {
+		log.Warn("Failed to initialize embedder for RAG", "error", err)
+		embedder = nil
+	} else {
+		log.Info("Embedder initialized", "provider", cfg.EmbeddingProvider, "model", cfg.OpenRouterModelEmbed)
+	}
+
 	// Initialize prediction service and handler
 	var predictionHandler *handlers.PredictionHandler
 	if chatProvider != nil {
@@ -97,7 +108,7 @@ func main() {
 		forecastAdapter := forecast.NewAdapter(cfg.ForecastingServiceURL)
 		forecastService := forecast.NewService(forecastAdapter, db.Pool())
 		usageService := usage.NewService(db)
-		predictionService := prediction.NewService(db.Pool(), chatProvider, forecastService, usageService, exaClient, chatModel)
+		predictionService := prediction.NewService(db.Pool(), chatProvider, forecastService, usageService, exaClient, embedder, chatModel)
 		predictionHandler = handlers.NewPredictionHandler(predictionService)
 		log.Info("Prediction service initialized")
 	}
