@@ -27,7 +27,7 @@ type DailySales struct {
 
 // GetForecast returns the forecast for a specific product
 func (h *Handler) GetForecast(w http.ResponseWriter, r *http.Request) {
-	storeID := middleware.GetStoreID(r.Context())
+	companyID := middleware.GetCompanyID(r.Context())
 	productID := r.PathValue("product_id")
 
 	if productID == "" {
@@ -49,8 +49,8 @@ func (h *Handler) GetForecast(w http.ResponseWriter, r *http.Request) {
 	// Verify product belongs to store
 	var productName string
 	err = h.db.Pool().QueryRow(r.Context(), `
-		SELECT product_name FROM products WHERE id = $1 AND store_id = $2
-	`, productID, storeID).Scan(&productName)
+		SELECT name FROM products WHERE id = $1 AND company_id = $2
+	`, productID, companyID).Scan(&productName)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "Product not found")
 		return
@@ -60,10 +60,10 @@ func (h *Handler) GetForecast(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Pool().Query(r.Context(), `
 		SELECT sale_date, SUM(quantity) as total_qty
 		FROM sales_history
-		WHERE product_id = $1 AND store_id = $2 AND sale_date >= $3
+		WHERE product_id = $1 AND company_id = $2 AND sale_date >= $3
 		GROUP BY sale_date
 		ORDER BY sale_date ASC
-	`, productID, storeID, time.Now().AddDate(0, 0, -90))
+	`, productID, companyID, time.Now().AddDate(0, 0, -90))
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to fetch sales history")
 		return
@@ -154,24 +154,24 @@ func (h *Handler) GetForecast(w http.ResponseWriter, r *http.Request) {
 
 // GetRecommendations returns demand forecast recommendations for all products
 func (h *Handler) GetRecommendations(w http.ResponseWriter, r *http.Request) {
-	storeID := middleware.GetStoreID(r.Context())
-	if storeID == "" {
-		respondError(w, http.StatusUnauthorized, "Store not found in context")
+	companyID := middleware.GetCompanyID(r.Context())
+	if companyID == "" {
+		respondError(w, http.StatusUnauthorized, "Company not found in context")
 		return
 	}
 
 	// Get all products with their sales data
 	rows, err := h.db.Pool().Query(r.Context(), `
-		SELECT p.id, p.product_name,
+		SELECT p.id, p.name,
 			COALESCE(SUM(s.quantity), 0) as total_sales,
 			COUNT(DISTINCT s.sale_date) as days_with_sales
 		FROM products p
 		LEFT JOIN sales_history s ON p.id = s.product_id 
 			AND s.sale_date >= $2
-		WHERE p.store_id = $1
-		GROUP BY p.id, p.product_name
+		WHERE p.company_id = $1
+		GROUP BY p.id, p.name
 		ORDER BY total_sales DESC
-	`, storeID, time.Now().AddDate(0, 0, -30))
+	`, companyID, time.Now().AddDate(0, 0, -30))
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to fetch recommendations")
 		return

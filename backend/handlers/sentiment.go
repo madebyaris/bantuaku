@@ -12,7 +12,7 @@ import (
 
 // GetSentiment returns sentiment data for a product
 func (h *Handler) GetSentiment(w http.ResponseWriter, r *http.Request) {
-	storeID := middleware.GetStoreID(r.Context())
+	companyID := middleware.GetCompanyID(r.Context())
 	productID := r.PathValue("product_id")
 
 	if productID == "" {
@@ -34,8 +34,8 @@ func (h *Handler) GetSentiment(w http.ResponseWriter, r *http.Request) {
 	// Verify product belongs to store
 	var productName string
 	err = h.db.Pool().QueryRow(r.Context(), `
-		SELECT product_name FROM products WHERE id = $1 AND store_id = $2
-	`, productID, storeID).Scan(&productName)
+		SELECT name FROM products WHERE id = $1 AND company_id = $2
+	`, productID, companyID).Scan(&productName)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "Product not found")
 		return
@@ -54,14 +54,14 @@ func (h *Handler) GetSentiment(w http.ResponseWriter, r *http.Request) {
 
 // GetMarketTrends returns market trend data
 func (h *Handler) GetMarketTrends(w http.ResponseWriter, r *http.Request) {
-	storeID := middleware.GetStoreID(r.Context())
-	if storeID == "" {
-		respondError(w, http.StatusUnauthorized, "Store not found in context")
+	companyID := middleware.GetCompanyID(r.Context())
+	if companyID == "" {
+		respondError(w, http.StatusUnauthorized, "Company not found in context")
 		return
 	}
 
 	// Check cache
-	cacheKey := fmt.Sprintf("trends:%s", storeID)
+	cacheKey := fmt.Sprintf("trends:%s", companyID)
 	cached, err := h.redis.Get(r.Context(), cacheKey)
 	if err == nil && cached != "" {
 		var trends []models.MarketTrend
@@ -73,8 +73,8 @@ func (h *Handler) GetMarketTrends(w http.ResponseWriter, r *http.Request) {
 
 	// Get store's product categories
 	rows, err := h.db.Pool().Query(r.Context(), `
-		SELECT DISTINCT category FROM products WHERE store_id = $1 AND category != ''
-	`, storeID)
+		SELECT DISTINCT category FROM products WHERE company_id = $1 AND category != ''
+	`, companyID)
 
 	categories := []string{}
 	if err == nil {

@@ -26,10 +26,11 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     body: options.body ? JSON.stringify(options.body) : undefined,
   })
   
-  if (response.status === 401) {
+  if (response.status === 401 || response.status === 419) {
+    // 401 = Unauthorized, 419 = Token Expired
     logout()
     window.location.href = '/login'
-    throw new Error('Unauthorized')
+    throw new Error(response.status === 419 ? 'Token has expired' : 'Unauthorized')
   }
   
   if (!response.ok) {
@@ -48,8 +49,8 @@ export const api = {
       request<{
         token: string
         user_id: string
-        store_id: string
-        store_name: string
+        company_id: string
+        company_name: string
         plan: string
       }>('/auth/login', {
         method: 'POST',
@@ -145,10 +146,26 @@ export const api = {
   
   forecasts: {
     get: (productId: string) => request<ForecastResponse>(`/forecasts/${productId}`),
+    monthly: (productId: string) => {
+      const params = new URLSearchParams()
+      params.append('product_id', productId)
+      return request<{ product_id: string; forecasts: MonthlyForecast[]; count: number }>(
+        `/forecasts/monthly?${params.toString()}`
+      )
+    },
   },
   
   recommendations: {
     list: () => request<Recommendation[]>('/recommendations'),
+  },
+  strategies: {
+    monthly: (productId: string) => {
+      const params = new URLSearchParams()
+      params.append('product_id', productId)
+      return request<{ product_id: string; strategies: MonthlyStrategy[]; count: number }>(
+        `/strategies/monthly?${params.toString()}`
+      )
+    },
   },
   
   sentiment: {
@@ -157,6 +174,18 @@ export const api = {
   
   market: {
     trends: () => request<MarketTrend[]>('/market/trends'),
+  },
+
+  trends: {
+    keywords: () =>
+      request<{ keywords: TrendKeyword[]; count: number }>('/trends/keywords'),
+    series: (keywordId: string) => {
+      const params = new URLSearchParams()
+      params.append('keyword_id', keywordId)
+      return request<{ keyword_id: string; time_series: TrendPoint[] }>(
+        `/trends/series?${params.toString()}`
+      )
+    },
   },
   
   ai: {
@@ -172,10 +201,44 @@ export const api = {
   },
   
   chat: {
+    startConversation: (purpose: string) =>
+      request<{
+        conversation_id: string
+        title: string
+        created_at: string
+      }>('/chat/start', {
+        method: 'POST',
+        body: { purpose },
+      }),
+    sendMessage: (conversationId: string, message: string) =>
+      request<{
+        message_id: string
+        assistant_reply: string
+        structured_payload?: Record<string, unknown>
+        citations?: Array<{ text: string; source: string }>
+        rag_used: boolean
+      }>('/chat/message', {
+        method: 'POST',
+        body: { conversation_id: conversationId, message },
+      }),
     conversations: {
-      list: () => request<Conversation[]>('/chat/conversations'),
+      list: (limit?: number, offset?: number) => {
+        const params = new URLSearchParams()
+        if (limit !== undefined) params.append('limit', limit.toString())
+        if (offset !== undefined) params.append('offset', offset.toString())
+        const query = params.toString()
+        return request<{
+          conversations: ConversationSummary[]
+        }>(`/chat/conversations${query ? `?${query}` : ''}`).then(res => res.conversations || [])
+      },
       get: (id: string) => request<Conversation>(`/chat/conversations/${id}`),
-      messages: (conversationId: string) => request<Message[]>(`/chat/messages?conversation_id=${conversationId}`),
+      messages: (conversationId: string, limit?: number, offset?: number) => {
+        const params = new URLSearchParams()
+        params.append('conversation_id', conversationId)
+        if (limit !== undefined) params.append('limit', limit.toString())
+        if (offset !== undefined) params.append('offset', offset.toString())
+        return request<{ messages: Message[] }>(`/chat/messages?${params.toString()}`).then(res => res.messages || [])
+      },
     },
   },
   
@@ -184,13 +247,36 @@ export const api = {
       const params = new URLSearchParams()
       if (companyId) params.append('company_id', companyId)
       if (type) params.append('type', type)
-      return request<Insight[]>(`/insights?${params.toString()}`)
+      return request<{ insights: Insight[] }>(`/insights?${params.toString()}`).then(
+        (res) => res.insights || []
+      )
     },
+    generateMarketing: (payload?: {
+      target_products?: string[]
+      budget_range?: { min: number; max: number }
+      main_channels?: string[]
+    }) =>
+      request<InsightResponse>('/insights/marketing', {
+        method: 'POST',
+        body: payload || {},
+      }),
   },
   
   companies: {
     list: () => request<Company[]>('/companies'),
     get: (id: string) => request<CompanyProfile>(`/companies/${id}`),
+  },
+  
+  prediction: {
+    checkCompleteness: () => request<PredictionCompleteness>('/prediction/completeness'),
+    start: () => request<PredictionStartResponse>('/prediction/start', { method: 'POST' }),
+    status: (jobId?: string) => {
+      const params = new URLSearchParams()
+      if (jobId) params.append('job_id', jobId)
+      return request<PredictionStatus>(`/prediction/status${params.toString() ? '?' + params.toString() : ''}`)
+    },
+    results: () => request<PredictionResults>('/prediction/results'),
+    usage: () => request<PredictionUsage>('/prediction/usage'),
   },
   
   files: {
@@ -257,13 +343,37 @@ export const api = {
       }>(`/embeddings/index?${params.toString()}`, { method: 'POST' })
     },
   },
+
+  notifications: {
+    list: (status?: string) => {
+      const params = new URLSearchParams()
+      if (status) params.append('status', status)
+      return request<{ notifications: Notification[]; count: number }>(
+        `/notifications${params.toString() ? `?${params.toString()}` : ''}`
+      )
+    },
+    markRead: (id: string) =>
+      request<{ message: string }>(`/notifications/${id}/read`, { method: 'PUT' }),
+    delete: (id: string) =>
+      request<{ message: string }>(`/notifications/${id}`, { method: 'DELETE' }),
+  },
+
+  billing: {
+    plans: () => request<{ plans: BillingPlan[] }>('/billing/plans'),
+    subscription: () => request<BillingSubscription>('/billing/subscription'),
+    checkout: (planId: string, successUrl: string, cancelUrl: string) =>
+      request<{ url: string; id?: string }>('/billing/checkout', {
+        method: 'POST',
+        body: { plan_id: planId, success_url: successUrl, cancel_url: cancelUrl },
+      }),
+  },
 }
 
 // Types
 export interface Product {
   id: string
-  store_id: string
-  product_name: string
+  company_id: string
+  name: string
   sku: string
   category: string
   unit_price: number
@@ -282,7 +392,7 @@ export interface CreateProductRequest {
 
 export interface Sale {
   id: number
-  store_id: string
+  company_id: string
   product_id: string
   quantity: number
   price: number
@@ -325,6 +435,29 @@ export interface ForecastResponse {
   historical_sales: { date: string; quantity: number }[]
 }
 
+export interface MonthlyForecast {
+  id: string
+  month: number
+  predicted_quantity: number
+  confidence_lower: number
+  confidence_upper: number
+  confidence_score: number
+  algorithm: string
+  forecast_date: string
+}
+
+export interface MonthlyStrategy {
+  id: string
+  product_id: string
+  forecast_id?: string
+  month: number
+  strategy_text: string
+  actions?: Record<string, unknown>
+  priority?: string
+  estimated_impact?: Record<string, unknown>
+  created_at: string
+}
+
 export interface Recommendation {
   product_id: string
   product_name: string
@@ -353,6 +486,20 @@ export interface MarketTrend {
   trend_score: number
   growth_rate: number
   source: string
+}
+
+export interface TrendKeyword {
+  id: string
+  keyword: string
+  geo: string
+  category?: string
+  is_active?: boolean
+  created_at?: string
+}
+
+export interface TrendPoint {
+  timestamp: string
+  score: number
 }
 
 export interface AIAnalyzeResponse {
@@ -395,6 +542,9 @@ export interface InsightsCounts {
 export interface ConversationSummary {
   id: string
   title: string
+  purpose?: string
+  created_at: string
+  last_message_at: string
   last_message?: string
   updated_at: string
 }
@@ -432,6 +582,13 @@ export interface Insight {
   company_id: string
   type: string
   input_context?: Record<string, unknown>
+  result: Record<string, unknown>
+  created_at: string
+}
+
+export interface InsightResponse {
+  insight_id: string
+  type: string
   result: Record<string, unknown>
   created_at: string
 }
@@ -515,4 +672,96 @@ export interface RegulationSearchResult {
     category: string | null
     pdf_url: string | null
   }
+}
+
+export interface Notification {
+  id: string
+  company_id: string
+  user_id?: string
+  title: string
+  body?: string
+  type?: string
+  status: string
+  created_at: string
+  read_at?: string
+}
+
+export interface BillingPlan {
+  id: string
+  name: string
+  display_name: string
+  price_monthly: number
+  price_yearly?: number
+  currency: string
+  max_stores?: number
+  max_products?: number
+  features?: Record<string, unknown>
+  stripe_price_id_monthly?: string
+}
+
+export interface BillingSubscription {
+  id: string
+  plan_id: string
+  status: string
+  stripe_subscription_id?: string
+  current_period_start?: string
+  current_period_end?: string
+}
+
+// Prediction types
+export interface PredictionCompleteness {
+  is_complete: boolean
+  has_industry: boolean
+  has_city: boolean
+  has_products: boolean
+  has_social: boolean
+  missing?: string[]
+}
+
+export interface PredictionStartResponse {
+  job_id: string
+  status: string
+  message: string
+}
+
+export interface PredictionProgress {
+  keywords: boolean
+  social_media: boolean
+  forecast: boolean
+  market_prediction: boolean
+  marketing: boolean
+  regulations: boolean
+}
+
+export interface PredictionResultData {
+  keywords?: string[]
+  social_media_trends?: Record<string, unknown>
+  forecast_summary?: string
+  market_prediction?: string
+  marketing_recommendations?: string
+  regulations?: string
+}
+
+export interface PredictionStatus {
+  job_id?: string
+  status: string
+  progress?: PredictionProgress
+  results?: PredictionResultData
+  error_message?: string
+  has_active_job: boolean
+}
+
+export interface PredictionResults {
+  has_results: boolean
+  job_id?: string
+  completed_at?: string
+  results?: PredictionResultData
+  message?: string
+}
+
+export interface PredictionUsage {
+  used: number
+  limit: number
+  remaining: number
+  unlimited: boolean
 }

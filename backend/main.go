@@ -15,7 +15,14 @@ import (
 	"github.com/bantuaku/backend/middleware"
 	"github.com/bantuaku/backend/services/audit"
 	"github.com/bantuaku/backend/services/billing"
+	"github.com/bantuaku/backend/services/chat"
+	"github.com/bantuaku/backend/services/embedding"
+	"github.com/bantuaku/backend/services/exa"
+	"github.com/bantuaku/backend/services/forecast"
+	"github.com/bantuaku/backend/services/prediction"
+	"github.com/bantuaku/backend/services/settings"
 	"github.com/bantuaku/backend/services/storage"
+	"github.com/bantuaku/backend/services/usage"
 )
 
 func main() {
@@ -49,7 +56,7 @@ func main() {
 		log.Warn("Failed to connect to Redis", "error", err)
 		// Continue without Redis for now
 	} else {
-	defer redis.Close()
+		defer redis.Close()
 		log.Info("Redis connection established")
 	}
 
@@ -60,6 +67,51 @@ func main() {
 	// Initialize audit logger
 	auditLogger := audit.NewLogger(db)
 	log.Info("Audit logger initialized")
+
+	// Initialize settings service for AI provider configuration
+	settingsService := settings.NewService(db)
+
+	// Initialize chat provider
+	chatProvider, err := chat.NewChatProvider(context.Background(), cfg, settingsService)
+	if err != nil {
+		log.Warn("Failed to initialize chat provider for predictions", "error", err)
+	}
+
+	// Initialize Exa.ai client (optional - for enhanced research)
+	var exaClient *exa.Client
+	if cfg.ExaAPIKey != "" {
+		exaClient = exa.NewClient(cfg.ExaAPIKey)
+		log.Info("Exa.ai client initialized")
+	} else {
+		log.Info("Exa.ai not configured (EXA_API_KEY not set) - using AI-only mode for research")
+	}
+
+	// Initialize embedder for RAG (optional)
+	var embedder embedding.Embedder
+	embedder, err = embedding.NewEmbedder(cfg)
+	if err != nil {
+		log.Warn("Failed to initialize embedder for RAG", "error", err)
+		embedder = nil
+	} else {
+		log.Info("Embedder initialized", "provider", cfg.EmbeddingProvider, "model", cfg.OpenRouterModelEmbed)
+	}
+
+	// Initialize prediction service and handler
+	var predictionHandler *handlers.PredictionHandler
+	if chatProvider != nil {
+		// Get AI model from settings
+		chatModel := "x-ai/grok-4-fast" // Default model
+		if modelSetting, err := settingsService.GetSetting(context.Background(), "ai_model"); err == nil && modelSetting != "" {
+			chatModel = modelSetting
+		}
+
+		forecastAdapter := forecast.NewAdapter(cfg.ForecastingServiceURL)
+		forecastService := forecast.NewService(forecastAdapter, db.Pool())
+		usageService := usage.NewService(db)
+		predictionService := prediction.NewService(db.Pool(), chatProvider, forecastService, usageService, exaClient, embedder, chatModel)
+		predictionHandler = handlers.NewPredictionHandler(predictionService)
+		log.Info("Prediction service initialized")
+	}
 
 	// Initialize Stripe billing service (if configured)
 	var billingHandler *handlers.BillingHandler
@@ -90,6 +142,11 @@ func main() {
 	mux.HandleFunc("PUT /api/v1/products/{id}", middleware.Auth(cfg.JWTSecret, h.UpdateProduct))
 	mux.HandleFunc("DELETE /api/v1/products/{id}", middleware.Auth(cfg.JWTSecret, h.DeleteProduct))
 
+	// Company management
+	mux.HandleFunc("GET /api/v1/companies/me/profile", middleware.Auth(cfg.JWTSecret, h.GetCompanyProfile))
+	mux.HandleFunc("PATCH /api/v1/companies/me", middleware.Auth(cfg.JWTSecret, h.UpdateCompany))
+	mux.HandleFunc("PATCH /api/v1/companies/me/social-media", middleware.Auth(cfg.JWTSecret, h.UpdateCompanySocialMedia))
+
 	// Sales data input
 	mux.HandleFunc("POST /api/v1/sales/manual", middleware.Auth(cfg.JWTSecret, h.RecordSale))
 	mux.HandleFunc("POST /api/v1/sales/import-csv", middleware.Auth(cfg.JWTSecret, h.ImportCSV))
@@ -103,7 +160,7 @@ func main() {
 	// Forecasting
 	mux.HandleFunc("GET /api/v1/forecasts/{product_id}", middleware.Auth(cfg.JWTSecret, h.GetForecast))
 	mux.HandleFunc("GET /api/v1/recommendations", middleware.Auth(cfg.JWTSecret, h.GetRecommendations))
-	
+
 	// Advanced Forecasting (12-month)
 	mux.HandleFunc("GET /api/v1/forecasts/monthly", middleware.Auth(cfg.JWTSecret, h.GetMonthlyForecasts))
 	mux.HandleFunc("POST /api/v1/forecasts/monthly/generate", middleware.Auth(cfg.JWTSecret, h.GenerateMonthlyForecast))
@@ -123,6 +180,9 @@ func main() {
 	mux.HandleFunc("GET /api/v1/chat/conversations", middleware.Auth(cfg.JWTSecret, h.GetConversations))
 	mux.HandleFunc("GET /api/v1/chat/messages", middleware.Auth(cfg.JWTSecret, h.GetMessages))
 	mux.HandleFunc("POST /api/v1/chat/feedback", middleware.Auth(cfg.JWTSecret, h.SubmitFeedback))
+	mux.HandleFunc("GET /api/v1/notifications", middleware.Auth(cfg.JWTSecret, h.ListNotifications))
+	mux.HandleFunc("PUT /api/v1/notifications/{id}/read", middleware.Auth(cfg.JWTSecret, h.MarkNotificationRead))
+	mux.HandleFunc("DELETE /api/v1/notifications/{id}", middleware.Auth(cfg.JWTSecret, h.DeleteNotification))
 
 	// File Uploads (NEW)
 	mux.HandleFunc("POST /api/v1/files/upload", middleware.Auth(cfg.JWTSecret, h.UploadFile))
@@ -137,6 +197,15 @@ func main() {
 
 	// Dashboard
 	mux.HandleFunc("GET /api/v1/dashboard/summary", middleware.Auth(cfg.JWTSecret, h.DashboardSummary))
+
+	// Prediction (Background Research Jobs)
+	if predictionHandler != nil {
+		mux.HandleFunc("GET /api/v1/prediction/completeness", middleware.Auth(cfg.JWTSecret, predictionHandler.CheckCompleteness))
+		mux.HandleFunc("POST /api/v1/prediction/start", middleware.Auth(cfg.JWTSecret, predictionHandler.StartPrediction))
+		mux.HandleFunc("GET /api/v1/prediction/status", middleware.Auth(cfg.JWTSecret, predictionHandler.GetStatus))
+		mux.HandleFunc("GET /api/v1/prediction/results", middleware.Auth(cfg.JWTSecret, predictionHandler.GetLatestResults))
+		mux.HandleFunc("GET /api/v1/prediction/usage", middleware.Auth(cfg.JWTSecret, predictionHandler.GetUsage))
+	}
 
 	// Regulations scraper (admin endpoints) - with rate limiting
 	scrapingRateLimit := middleware.RateLimiter(redis, middleware.DefaultRateLimitConfigs.Scraping)
@@ -162,7 +231,7 @@ func main() {
 	adminAuth := func(handler http.HandlerFunc) http.Handler {
 		return adminRateLimit(middleware.Auth(cfg.JWTSecret, middleware.RequireAdmin(handler)))
 	}
-	
+
 	mux.Handle("GET /api/v1/admin/users", adminAuth(adminHandler.ListUsers))
 	mux.Handle("GET /api/v1/admin/users/{id}", adminAuth(adminHandler.GetUser))
 	mux.Handle("POST /api/v1/admin/users", adminAuth(adminHandler.CreateUser))
@@ -172,19 +241,36 @@ func main() {
 	mux.Handle("PUT /api/v1/admin/users/{id}/upgrade-subscription", adminAuth(adminHandler.UpgradeUserSubscription))
 	mux.Handle("DELETE /api/v1/admin/users/{id}", adminAuth(adminHandler.DeleteUser))
 	mux.Handle("GET /api/v1/admin/stats", adminAuth(adminHandler.GetStats))
-	
+
+	mux.Handle("GET /api/v1/admin/subscriptions/stats", adminAuth(adminHandler.GetSubscriptionStats))
 	mux.Handle("GET /api/v1/admin/subscriptions", adminAuth(adminHandler.ListSubscriptions))
 	mux.Handle("GET /api/v1/admin/subscriptions/{id}", adminAuth(adminHandler.GetSubscription))
+	mux.Handle("GET /api/v1/admin/subscriptions/{id}/transactions", adminAuth(adminHandler.GetSubscriptionTransactions))
 	mux.Handle("POST /api/v1/admin/subscriptions", adminAuth(adminHandler.CreateSubscription))
 	mux.Handle("PUT /api/v1/admin/subscriptions/{id}/status", adminAuth(adminHandler.UpdateSubscriptionStatus))
-	
+
+	// Admin chat usage and token tracking
+	mux.Handle("GET /api/v1/admin/chat-usage", adminAuth(adminHandler.GetChatUsage))
+	mux.Handle("GET /api/v1/admin/token-usage", adminAuth(adminHandler.GetTokenUsage))
+
+	// Admin subscription plans CRUD
+	mux.Handle("GET /api/v1/admin/plans", adminAuth(adminHandler.ListPlans))
+	mux.Handle("GET /api/v1/admin/plans/{id}", adminAuth(adminHandler.GetPlan))
+	mux.Handle("POST /api/v1/admin/plans", adminAuth(adminHandler.CreatePlan))
+	mux.Handle("PUT /api/v1/admin/plans/{id}", adminAuth(adminHandler.UpdatePlan))
+	mux.Handle("DELETE /api/v1/admin/plans/{id}", adminAuth(adminHandler.DeletePlan))
+
 	mux.Handle("GET /api/v1/admin/audit-logs", adminAuth(adminHandler.ListAuditLogs))
+
+	// Admin settings routes
+	mux.Handle("GET /api/v1/admin/settings/ai-provider", adminAuth(adminHandler.GetAIProvider))
+	mux.Handle("PUT /api/v1/admin/settings/ai-provider", adminAuth(adminHandler.UpdateAIProvider))
 
 	// Billing routes (if Stripe is configured)
 	if billingHandler != nil {
 		mux.HandleFunc("POST /api/v1/billing/checkout", middleware.Auth(cfg.JWTSecret, billingHandler.CreateCheckoutSession))
 		mux.HandleFunc("GET /api/v1/billing/subscription", middleware.Auth(cfg.JWTSecret, billingHandler.GetSubscription))
-		mux.HandleFunc("GET /api/v1/billing/plans", billingHandler.ListPlans) // Public endpoint
+		mux.HandleFunc("GET /api/v1/billing/plans", billingHandler.ListPlans)        // Public endpoint
 		mux.HandleFunc("POST /api/v1/billing/webhook", billingHandler.HandleWebhook) // Webhook doesn't need auth
 	}
 

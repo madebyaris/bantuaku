@@ -7,9 +7,11 @@ import (
 
 	"github.com/bantuaku/backend/errors"
 	"github.com/bantuaku/backend/logger"
+	"github.com/bantuaku/backend/middleware"
 	"github.com/bantuaku/backend/services/forecast"
 	"github.com/bantuaku/backend/services/kolosal"
 	"github.com/bantuaku/backend/services/strategy"
+	"github.com/bantuaku/backend/services/usage"
 )
 
 // GetMonthlyForecasts retrieves 12-month forecasts for a product
@@ -42,27 +44,46 @@ func (h *Handler) GetMonthlyForecasts(w http.ResponseWriter, r *http.Request) {
 	responseForecasts := make([]map[string]interface{}, len(forecasts))
 	for i, f := range forecasts {
 		responseForecasts[i] = map[string]interface{}{
-			"id":                f.ID,
-			"month":            f.Month,
+			"id":                 f.ID,
+			"month":              f.Month,
 			"predicted_quantity": f.PredictedQuantity,
-			"confidence_lower":  f.ConfidenceLower,
-			"confidence_upper":  f.ConfidenceUpper,
-			"confidence_score":  f.ConfidenceScore,
-			"algorithm":        f.Algorithm,
-			"forecast_date":    f.ForecastDate.Format("2006-01-02"),
+			"confidence_lower":   f.ConfidenceLower,
+			"confidence_upper":   f.ConfidenceUpper,
+			"confidence_score":   f.ConfidenceScore,
+			"algorithm":          f.Algorithm,
+			"forecast_date":      f.ForecastDate.Format("2006-01-02"),
 		}
 	}
 
 	h.respondJSON(w, http.StatusOK, map[string]interface{}{
 		"product_id": productID,
-		"forecasts": responseForecasts,
-		"count":     len(responseForecasts),
+		"forecasts":  responseForecasts,
+		"count":      len(responseForecasts),
 	})
 }
 
 // GenerateMonthlyForecast generates a new 12-month forecast
 func (h *Handler) GenerateMonthlyForecast(w http.ResponseWriter, r *http.Request) {
 	log := logger.With("request_id", r.Context().Value("request_id"))
+	ctx := r.Context()
+	companyID := middleware.GetCompanyID(ctx)
+
+	if h.config.ForecastingServiceURL == "" {
+		h.respondError(w, errors.NewValidationError("FORECASTING_SERVICE_URL not configured", ""), r)
+		return
+	}
+
+	// Check forecast usage limit
+	usageService := usage.NewService(h.db)
+	canForecast, limitMsg, err := usageService.CheckForecastLimit(ctx, companyID)
+	if err != nil {
+		log.Warn("Failed to check forecast limit", "error", err)
+		// Continue on error - don't block user
+	} else if !canForecast {
+		h.respondError(w, errors.NewAppError(errors.ErrCodeForbidden, limitMsg, "forecast_limit_exceeded"), r)
+		return
+	}
+
 	productID := r.URL.Query().Get("product_id")
 	if productID == "" {
 		h.respondError(w, errors.NewValidationError("product_id is required", ""), r)
@@ -93,10 +114,10 @@ func (h *Handler) GenerateMonthlyForecast(w http.ResponseWriter, r *http.Request
 	log.Info("Monthly forecast generated", "product_id", productID, "forecast_id", forecastID)
 
 	h.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"forecast_id": forecastID,
-		"product_id":  productID,
-		"forecasts":   forecastResp.Forecasts,
-		"algorithm":   forecastResp.Algorithm,
+		"forecast_id":   forecastID,
+		"product_id":    productID,
+		"forecasts":     forecastResp.Forecasts,
+		"algorithm":     forecastResp.Algorithm,
 		"forecast_date": forecastResp.ForecastDate,
 	})
 }
@@ -146,21 +167,21 @@ func (h *Handler) GetMonthlyStrategies(w http.ResponseWriter, r *http.Request) {
 
 		strategies = append(strategies, map[string]interface{}{
 			"id":               id,
-			"product_id":      productID,
-			"forecast_id":     forecastID,
-			"month":           month,
-			"strategy_text":   strategyText,
-			"actions":         actionsMap,
-			"priority":        priority,
+			"product_id":       productID,
+			"forecast_id":      forecastID,
+			"month":            month,
+			"strategy_text":    strategyText,
+			"actions":          actionsMap,
+			"priority":         priority,
 			"estimated_impact": impactMap,
-			"created_at":      createdAt,
+			"created_at":       createdAt,
 		})
 	}
 
 	h.respondJSON(w, http.StatusOK, map[string]interface{}{
 		"product_id": productID,
 		"strategies": strategies,
-		"count":     len(strategies),
+		"count":      len(strategies),
 	})
 }
 
@@ -196,7 +217,7 @@ func (h *Handler) GenerateStrategies(w http.ResponseWriter, r *http.Request) {
 	}
 	for i, f := range forecasts {
 		forecastResp.Forecasts[i] = forecast.MonthlyForecast{
-			Month:            f.Month,
+			Month:             f.Month,
 			PredictedQuantity: f.PredictedQuantity,
 			ConfidenceLower:   f.ConfidenceLower,
 			ConfidenceUpper:   f.ConfidenceUpper,
@@ -242,7 +263,6 @@ func (h *Handler) GenerateStrategies(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, map[string]interface{}{
 		"product_id": productID,
 		"strategies": strategies,
-		"count":     len(strategies),
+		"count":      len(strategies),
 	})
 }
-

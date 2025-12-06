@@ -137,8 +137,8 @@ function ManualEntryForm({ products }: { products: Product[] }) {
                 </SelectTrigger>
                 <SelectContent>
                   {products.map((product) => (
-                    <SelectItem key={product.id} value={product.id}>
-                      {product.product_name} - {formatCurrency(product.unit_price)}
+                  <SelectItem key={product.id} value={product.id}>
+                      {product.name} - {formatCurrency(product.unit_price)}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -8,19 +8,23 @@ import (
 
 	"github.com/bantuaku/backend/logger"
 	"github.com/bantuaku/backend/services/audit"
+	"github.com/bantuaku/backend/services/chat"
+	"github.com/bantuaku/backend/services/embedding"
+	"github.com/bantuaku/backend/services/exa"
 	"github.com/bantuaku/backend/services/kolosal"
 	"github.com/bantuaku/backend/services/scraper/regulations"
+	"github.com/bantuaku/backend/services/settings"
 )
 
-// TriggerScraping triggers a manual scraping job
+// TriggerScraping triggers a manual scraping job (AI-powered v2)
 func (h *Handler) TriggerScraping(w http.ResponseWriter, r *http.Request) {
 	log := logger.With("request_id", r.Context().Value("request_id"))
 
-	// Get max_pages query parameter (default: 5)
-	maxPages := 5
-	if maxPagesStr := r.URL.Query().Get("max_pages"); maxPagesStr != "" {
-		if parsed, err := strconv.Atoi(maxPagesStr); err == nil && parsed > 0 {
-			maxPages = parsed
+	// Get max_results query parameter (default: 3 results per keyword)
+	maxResults := 3
+	if maxResultsStr := r.URL.Query().Get("max_results"); maxResultsStr != "" {
+		if parsed, err := strconv.Atoi(maxResultsStr); err == nil && parsed > 0 {
+			maxResults = parsed
 		}
 	}
 
@@ -30,11 +34,43 @@ func (h *Handler) TriggerScraping(w http.ResponseWriter, r *http.Request) {
 	// Create Kolosal client
 	kolosalClient := kolosal.NewClient(h.config.KolosalAPIKey)
 
-	// Create scheduler
-	scheduler := regulations.NewScheduler(
+	// Create Exa client (for AI-powered discovery)
+	var exaClient *exa.Client
+	if h.config.ExaAPIKey != "" {
+		exaClient = exa.NewClient(h.config.ExaAPIKey)
+		log.Info("Exa.ai client available for regulation discovery")
+	}
+
+	// Create chat provider (for AI keyword generation and summarization)
+	var chatProvider chat.ChatProvider
+	var chatModel string
+	settingsService := settings.NewService(h.db)
+	chatProvider, err := chat.NewChatProvider(r.Context(), h.config, settingsService)
+	if err != nil {
+		log.Warn("Chat provider not available", "error", err)
+	} else {
+		chatModel = "x-ai/grok-4-fast"
+		if modelSetting, err := settingsService.GetSetting(r.Context(), "ai_model"); err == nil && modelSetting != "" {
+			chatModel = modelSetting
+		}
+	}
+
+	// Create embedder (for RAG)
+	var embedder embedding.Embedder
+	embedder, err = embedding.NewEmbedder(h.config)
+	if err != nil {
+		log.Warn("Embedder not available", "error", err)
+	}
+
+	// Create AI-powered scheduler (v2)
+	scheduler := regulations.NewSchedulerV2(
 		pool,
 		h.config.RegulationsBaseURL,
 		kolosalClient,
+		exaClient,
+		chatProvider,
+		embedder,
+		chatModel,
 	)
 
 	// Check if job is already running
@@ -45,29 +81,37 @@ func (h *Handler) TriggerScraping(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Determine mode
+	mode := "v2_ai_powered"
+	if exaClient == nil || chatProvider == nil {
+		mode = "legacy"
+	}
+
 	// Run job in goroutine
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
 
-		if err := scheduler.RunJob(ctx, maxPages); err != nil {
+		if err := scheduler.RunJob(ctx, maxResults); err != nil {
 			log.Error("Scraping job failed", "error", err)
 		}
 	}()
 
-	log.Info("Scraping job triggered", "max_pages", maxPages)
+	log.Info("Scraping job triggered", "max_results", maxResults, "mode", mode)
 
 	// Log audit event for scraping action
 	if h.auditLogger != nil {
 		h.auditLogger.LogAction(r.Context(), r, audit.ActionRegulationScraped, map[string]interface{}{
-			"max_pages": maxPages,
+			"max_results": maxResults,
+			"mode":        mode,
 		})
 	}
 
 	h.respondJSON(w, http.StatusAccepted, map[string]interface{}{
-		"message":  "Scraping job started",
-		"max_pages": maxPages,
-		"status":   "running",
+		"message":     "Scraping job started",
+		"max_results": maxResults,
+		"mode":        mode,
+		"status":      "running",
 	})
 }
 
@@ -191,4 +235,3 @@ func (h *Handler) ListRegulations(w http.ResponseWriter, r *http.Request) {
 		"offset":      offset,
 	})
 }
-

@@ -13,6 +13,8 @@ import { MarketPredictionPage } from "@/pages/MarketPredictionPage";
 import { MarketingPage } from "@/pages/MarketingPage";
 import { RegulationPage } from "@/pages/RegulationPage";
 import { AIChatPage } from "@/pages/AIChatPage";
+import { BillingPage } from "@/pages/BillingPage";
+import { PricingPage } from "@/pages/PricingPage";
 import { Toaster } from "@/components/ui/toaster";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -51,6 +53,8 @@ function App() {
           <Route path="market-prediction" element={<MarketPredictionPage />} />
           <Route path="marketing" element={<MarketingPage />} />
           <Route path="regulation" element={<RegulationPage />} />
+          <Route path="billing" element={<BillingPage />} />
+          <Route path="pricing" element={<PricingPage />} />
           <Route path="ai-chat" element={<AIChatPage />} />
         </Route>
 

@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Bell, Search, Menu, X, Info, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Bell, Search, Menu, X, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useNotificationStore } from '@/state/notifications'
 
 const pageTitles: Record<string, { title: string; description: string }> = {
   '/dashboard': {
@@ -32,42 +33,6 @@ const pageTitles: Record<string, { title: string; description: string }> = {
   },
 }
 
-interface Notification {
-  id: string
-  title: string
-  message: string
-  type: 'info' | 'success' | 'warning'
-  time: string
-  read: boolean
-}
-
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    title: 'Forecast Selesai',
-    message: 'Analisis forecast penjualan bulan depan telah siap.',
-    type: 'success',
-    time: 'Baru saja',
-    read: false,
-  },
-  {
-    id: '2',
-    title: 'Update Regulasi',
-    message: 'Ada perubahan peraturan pajak UMKM yang perlu diperhatikan.',
-    type: 'warning',
-    time: '1 jam yang lalu',
-    read: false,
-  },
-  {
-    id: '3',
-    title: 'Tren Pasar Baru',
-    message: 'Produk kategori "Minuman Sehat" sedang naik daun.',
-    type: 'info',
-    time: '2 jam yang lalu',
-    read: true,
-  },
-]
-
 interface HeaderProps {
   onOpenSidebar: () => void
 }
@@ -76,6 +41,8 @@ export function Header({ onOpenSidebar }: HeaderProps) {
   const location = useLocation()
   const [showNotifications, setShowNotifications] = useState(false)
   const notificationRef = useRef<HTMLDivElement>(null)
+  const { items, load, markRead, remove, loading } = useNotificationStore()
+  const unreadCount = items.filter((n) => n.status !== 'read').length
   
   const pageInfo = pageTitles[location.pathname] || {
     title: 'Bantuaku',
@@ -94,6 +61,10 @@ export function Header({ onOpenSidebar }: HeaderProps) {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
 
   return (
     <header className="sticky top-0 z-40 bg-black/50 backdrop-blur-xl border-b border-white/10">
@@ -143,26 +114,40 @@ export function Header({ onOpenSidebar }: HeaderProps) {
               onClick={() => setShowNotifications(!showNotifications)}
             >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+              {unreadCount > 0 && (
+                <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+              )}
             </Button>
 
             {/* Notification Dropdown */}
             {showNotifications && (
               <div className="absolute right-0 mt-2 w-80 md:w-96 bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 z-50 ring-1 ring-white/5">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-white/5">
-                  <h3 className="font-semibold text-slate-100">Notifikasi</h3>
+                  <h3 className="font-semibold text-slate-100">
+                    Notifikasi {unreadCount > 0 && <span className="text-xs text-emerald-400">({unreadCount} baru)</span>}
+                  </h3>
                   <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-white" onClick={() => setShowNotifications(false)}>
                     <X className="w-4 h-4" />
                   </Button>
                 </div>
                 <div className="max-h-[400px] overflow-y-auto bg-[#0a0a0a]">
-                  {mockNotifications.map((notification) => (
+                  {loading ? (
+                    <div className="flex items-center justify-center py-6">
+                      <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                    </div>
+                  ) : items.length === 0 ? (
+                    <p className="text-sm text-slate-500 px-4 py-6 text-center">
+                      Tidak ada notifikasi
+                    </p>
+                  ) : (
+                    items.map((notification) => (
                     <div 
                       key={notification.id}
                       className={cn(
                         "p-4 border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer",
-                        !notification.read && "bg-emerald-500/5"
+                        notification.status !== 'read' && "bg-emerald-500/5"
                       )}
+                      onClick={() => markRead(notification.id)}
                     >
                       <div className="flex gap-3">
                         <div className={cn(
@@ -173,21 +158,42 @@ export function Header({ onOpenSidebar }: HeaderProps) {
                         )} />
                         <div className="flex-1 space-y-1">
                           <div className="flex items-center justify-between">
-                            <p className={cn("text-sm font-medium", !notification.read ? "text-slate-100" : "text-slate-400")}>
-                              {notification.title}
+                            <p className={cn("text-sm font-medium", notification.status !== 'read' ? "text-slate-100" : "text-slate-400")}>
+                              {notification.title || 'Notifikasi'}
                             </p>
-                            <span className="text-[10px] text-slate-500">{notification.time}</span>
+                            <span className="text-[10px] text-slate-500">
+                              {new Date(notification.created_at).toLocaleString('id-ID')}
+                            </span>
                           </div>
                           <p className="text-xs text-slate-400 leading-relaxed">
-                            {notification.message}
+                            {notification.body || 'Tidak ada detail'}
                           </p>
                         </div>
                       </div>
+                      <div className="flex justify-end pt-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-[11px] text-slate-400 hover:text-red-300"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            remove(notification.id)
+                          }}
+                        >
+                          Hapus
+                        </Button>
+                      </div>
                     </div>
-                  ))}
+                    ))
+                  )}
                 </div>
                 <div className="p-2 border-t border-white/10 bg-white/5 text-center">
-                  <Button variant="ghost" size="sm" className="text-xs text-emerald-400 hover:text-emerald-300 hover:bg-transparent w-full h-8">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-emerald-400 hover:text-emerald-300 hover:bg-transparent w-full h-8"
+                    onClick={() => items.forEach((n) => markRead(n.id))}
+                  >
                     Tandai semua sudah dibaca
                   </Button>
                 </div>

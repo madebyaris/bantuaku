@@ -9,6 +9,7 @@ import {
   LogOut,
   Zap,
   X,
+  CreditCard,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/state/auth'
@@ -20,6 +21,7 @@ const navigation = [
   { name: 'Market Prediction', href: '/market-prediction', icon: Globe },
   { name: 'Marketing Recommendation', href: '/marketing', icon: Megaphone },
   { name: 'Government Regulation', href: '/regulation', icon: Scale },
+  { name: 'Billing', href: '/billing', icon: CreditCard },
 ]
 
 interface SidebarProps {
@@ -29,7 +31,7 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation()
-  const { storeName, plan, logout } = useAuthStore()
+  const { companyName, plan, logout } = useAuthStore()
 
   return (
     <>
@@ -74,7 +76,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="px-4 py-4 border-b border-white/5">
           <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/5">
             <p className="font-medium text-sm text-slate-200 truncate">
-              {storeName || 'Toko Anda'}
+              {companyName || 'Perusahaan Anda'}
             </p>
             <span
               className={cn(

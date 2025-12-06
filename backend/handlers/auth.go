@@ -30,11 +30,11 @@ type LoginRequest struct {
 
 // AuthResponse represents authentication response with token
 type AuthResponse struct {
-	Token     string `json:"token"`
-	UserID    string `json:"user_id"`
-	StoreID   string `json:"store_id"`
-	StoreName string `json:"store_name"`
-	Plan      string `json:"plan"`
+	Token       string `json:"token"`
+	UserID      string `json:"user_id"`
+	CompanyID   string `json:"company_id"`
+	CompanyName string `json:"company_name"`
+	Plan        string `json:"plan"`
 }
 
 // Register handles user registration
@@ -205,16 +205,16 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Get company for this user (stores table was renamed to companies in migration 003)
 	log := logger.With("request_id", r.Context().Value("request_id"))
-	
+
 	// Try to get active company first, then fall back to any company
-	var storeID, storeName, plan string
+	var companyID, companyName, plan string
 	err = h.db.Pool().QueryRow(ctx, `
 		SELECT id, name, subscription_plan 
 		FROM companies 
 		WHERE owner_user_id = $1 AND status = 'active' 
 		LIMIT 1
-	`, userID).Scan(&storeID, &storeName, &plan)
-	
+	`, userID).Scan(&companyID, &companyName, &plan)
+
 	// If no active company, try to get any company for this user (including inactive)
 	if err != nil {
 		log.Debug("No active company found, trying any company", "user_id", userID, "error", err.Error())
@@ -224,19 +224,19 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			WHERE owner_user_id = $1 
 			ORDER BY created_at DESC
 			LIMIT 1
-		`, userID).Scan(&storeID, &storeName, &plan)
-		
+		`, userID).Scan(&companyID, &companyName, &plan)
+
 		// If we found an inactive company, reactivate it
 		if err == nil {
 			var companyStatus string
-			statusErr := h.db.Pool().QueryRow(ctx, `SELECT status FROM companies WHERE id = $1`, storeID).Scan(&companyStatus)
+			statusErr := h.db.Pool().QueryRow(ctx, `SELECT status FROM companies WHERE id = $1`, companyID).Scan(&companyStatus)
 			if statusErr == nil && companyStatus != "active" {
-				log.Info("Reactivating inactive company for user", "user_id", userID, "company_id", storeID)
-				_, _ = h.db.Pool().Exec(ctx, `UPDATE companies SET status = 'active' WHERE id = $1`, storeID)
+				log.Info("Reactivating inactive company for user", "user_id", userID, "company_id", companyID)
+				_, _ = h.db.Pool().Exec(ctx, `UPDATE companies SET status = 'active' WHERE id = $1`, companyID)
 			}
 		}
 	}
-	
+
 	// If still no company found, this should not happen with transaction-based user creation
 	// Return an error instead of auto-creating with generic name
 	if err != nil {
@@ -247,7 +247,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate JWT token (include role)
-	token, err := h.generateToken(userID, storeID, role)
+	token, err := h.generateToken(userID, companyID, role)
 	if err != nil {
 		appErr := errors.NewInternalError(err, "Failed to generate token")
 		h.respondError(w, appErr, r)
@@ -255,21 +255,22 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.respondJSON(w, http.StatusOK, AuthResponse{
-		Token:     token,
-		UserID:    userID,
-		StoreID:   storeID,
-		StoreName: storeName,
-		Plan:      plan,
+		Token:       token,
+		UserID:      userID,
+		CompanyID:   companyID,
+		CompanyName: companyName,
+		Plan:        plan,
 	})
 }
 
-func (h *Handler) generateToken(userID, storeID, role string) (string, error) {
+func (h *Handler) generateToken(userID, companyID, role string) (string, error) {
 	claims := jwt.MapClaims{
-		"user_id":  userID,
-		"store_id": storeID,
-		"role":     role,
-		"exp":      time.Now().Add(24 * time.Hour).Unix(),
-		"iat":      time.Now().Unix(),
+		"user_id":    userID,
+		"store_id":   companyID, // backward compatibility for old clients
+		"company_id": companyID, // canonical
+		"role":       role,
+		"exp":        time.Now().Add(24 * time.Hour).Unix(),
+		"iat":        time.Now().Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
