@@ -1,0 +1,94 @@
+# Cubic.dev Configuration for Bantuaku
+# https://cubic.dev/docs/configuration
+
+version: 1
+
+# Review settings
+review:
+  # Auto-review new PRs
+  auto_review: true
+  
+  # Review profile
+  profile: balanced  # Options: strict, balanced, lenient
+  
+  # Include draft PRs
+  include_drafts: false
+
+# Language and framework detection
+languages:
+  go:
+    enabled: true
+    paths:
+      - "backend/**/*.go"
+    rules:
+      - error-handling
+      - security
+      - performance
+      
+  typescript:
+    enabled: true
+    paths:
+      - "frontend/src/**/*.{ts,tsx}"
+      - "admin/src/**/*.{ts,tsx}"
+    rules:
+      - type-safety
+      - react-best-practices
+      - security
+
+  python:
+    enabled: true
+    paths:
+      - "services/forecasting/**/*.py"
+    rules:
+      - type-hints
+      - security
+
+# Path-specific instructions
+path_instructions:
+  - path: "backend/**/*.go"
+    instructions: |
+      Go backend code review guidelines:
+      - Ensure proper error handling (no ignored errors)
+      - Check for SQL injection vulnerabilities (use parameterized queries)
+      - Verify context usage for cancellation and timeouts
+      - Review for proper resource cleanup (defer statements)
+      - Check for nil pointer dereferences
+      - Ensure proper authentication/authorization checks
+      - Review logging for sensitive data exposure
+
+  - path: "frontend/src/**/*.{ts,tsx}"
+    instructions: |
+      React/TypeScript frontend code review guidelines:
+      - Check TypeScript type safety (no any types)
+      - Review React hooks usage (proper dependencies)
+      - Check for memory leaks (useEffect cleanup)
+      - Verify proper error handling and loading states
+      - Review accessibility (a11y) practices
+      - Check for XSS vulnerabilities
+      - Ensure proper state management with Zustand
+
+  - path: "services/forecasting/**/*.py"
+    instructions: |
+      Python ML service code review guidelines:
+      - Check for proper type hints
+      - Review error handling
+      - Verify data validation
+      - Check for security issues
+
+# Ignore patterns
+ignore:
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/vendor/**"
+  - "**/*.min.js"
+  - "**/*.bundle.js"
+  - "**/go.sum"
+  - "**/*_test.go"
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
+
+# Security scanning
+security:
+  enabled: true
+  secret_detection: true
