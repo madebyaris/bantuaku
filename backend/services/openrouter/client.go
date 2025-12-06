@@ -124,11 +124,8 @@ func (c *Client) CreateChatCompletion(ctx context.Context, req ChatCompletionReq
 	fmt.Printf("[OpenRouter Chat] Request URL: %s\n", url)
 	fmt.Printf("[OpenRouter Chat] Request Body Length: %d bytes\n", len(reqBody))
 	fmt.Printf("[OpenRouter Chat] Request Body: %s\n", string(reqBody))
-	apiKeyPreview := c.APIKey
-	if len(apiKeyPreview) > 10 {
-		apiKeyPreview = apiKeyPreview[:10] + "..."
-	}
-	fmt.Printf("[OpenRouter Chat] Authorization Header: Bearer %s\n", apiKeyPreview)
+	// DO NOT log API keys. Indicate the Authorization header is set, without value.
+	fmt.Printf("[OpenRouter Chat] Authorization Header: Bearer [REDACTED]\n")
 
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
