@@ -53,21 +53,32 @@ export function ChatInterface({ isWidget = false, className }: ChatInterfaceProp
     }
   }, [])
 
-  // Initialize conversation on mount (single continuous chat)
+  // Initialize conversation on mount ONLY ONCE (single continuous chat)
   useEffect(() => {
+    let mounted = true
+    
     const init = async () => {
       try {
         await initializeConversation()
         // Also check completeness on init
-        await checkCompleteness()
+        if (mounted) {
+          await checkCompleteness()
+        }
       } catch (err) {
         console.error('Failed to initialize conversation:', err)
       } finally {
-        setInitializing(false)
+        if (mounted) {
+          setInitializing(false)
+        }
       }
     }
     init()
-  }, [initializeConversation, checkCompleteness])
+    
+    return () => {
+      mounted = false
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Empty dependency array - only run on mount
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
