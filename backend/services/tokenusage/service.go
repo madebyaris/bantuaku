@@ -177,7 +177,6 @@ func (s *Service) GetUsageStats(ctx context.Context, companyID *string, model *s
 	if endDate != nil {
 		breakdownQuery += ` AND created_at <= $` + fmt.Sprintf("%d", breakdownArgIndex)
 		breakdownArgs = append(breakdownArgs, *endDate)
-		breakdownArgIndex++
 	}
 
 	breakdownQuery += ` GROUP BY model, provider ORDER BY total_tokens DESC`
@@ -313,7 +312,6 @@ func (s *Service) GetTokenUsage(ctx context.Context, companyID *string, model *s
 	if endDate != nil {
 		countQuery += ` AND created_at <= $` + fmt.Sprintf("%d", countArgIndex)
 		countArgs = append(countArgs, *endDate)
-		countArgIndex++
 	}
 
 	var total int

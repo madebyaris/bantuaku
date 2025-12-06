@@ -20,8 +20,9 @@ type SubmitFeedbackRequest struct {
 // SubmitFeedback handles user feedback submission
 func (h *Handler) SubmitFeedback(w http.ResponseWriter, r *http.Request) {
 	log := logger.With("request_id", r.Context().Value("request_id"))
-	userID := r.Context().Value("user_id").(string)
-	if userID == "" {
+	userIDVal := r.Context().Value("user_id")
+	userID, ok := userIDVal.(string)
+	if !ok || userID == "" {
 		h.respondError(w, errors.NewValidationError("user_id required", ""), r)
 		return
 	}

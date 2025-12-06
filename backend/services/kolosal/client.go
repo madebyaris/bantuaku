@@ -118,16 +118,6 @@ func (c *Client) CreateChatCompletion(ctx context.Context, req ChatCompletionReq
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
 
-	// Log request details for debugging
-	fmt.Printf("[Kolosal Chat] Request URL: %s\n", url)
-	fmt.Printf("[Kolosal Chat] Request Body Length: %d bytes\n", len(reqBody))
-	fmt.Printf("[Kolosal Chat] Request Body: %s\n", string(reqBody))
-	apiKeyPreview := c.APIKey
-	if len(apiKeyPreview) > 10 {
-		apiKeyPreview = apiKeyPreview[:10] + "..."
-	}
-	fmt.Printf("[Kolosal Chat] Authorization Header: Bearer %s\n", apiKeyPreview)
-
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
@@ -140,13 +130,8 @@ func (c *Client) CreateChatCompletion(ctx context.Context, req ChatCompletionReq
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("[Kolosal Chat] Error Response Status: %d\n", resp.StatusCode)
-		fmt.Printf("[Kolosal Chat] Error Response Body: %s\n", string(bodyBytes))
 		return nil, fmt.Errorf("API error: %d - %s", resp.StatusCode, string(bodyBytes))
 	}
-
-	fmt.Printf("[Kolosal Chat] Success Response Status: %d\n", resp.StatusCode)
-	fmt.Printf("[Kolosal Chat] Response Body Length: %d bytes\n", len(bodyBytes))
 
 	var chatResp ChatCompletionResponse
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
@@ -211,15 +196,6 @@ func (c *Client) OCR(ctx context.Context, req OCRRequest) (*OCRResponse, error) 
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
 
-	// Debug logging
-	fmt.Printf("[Kolosal OCR] Request URL: %s\n", url)
-	fmt.Printf("[Kolosal OCR] Image size (base64): %d bytes\n", len(req.ImageData))
-	apiKeyPreview := c.APIKey
-	if len(apiKeyPreview) > 10 {
-		apiKeyPreview = apiKeyPreview[:10] + "..."
-	}
-	fmt.Printf("[Kolosal OCR] Authorization: Bearer %s\n", apiKeyPreview)
-
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
@@ -229,11 +205,8 @@ func (c *Client) OCR(ctx context.Context, req OCRRequest) (*OCRResponse, error) 
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("[Kolosal OCR] Error: %d - %s\n", resp.StatusCode, string(body))
 		return nil, fmt.Errorf("API error: %d - %s", resp.StatusCode, string(body))
 	}
-
-	fmt.Printf("[Kolosal OCR] Success: %d\n", resp.StatusCode)
 
 	var ocrResp OCRResponse
 	if err := json.Unmarshal(body, &ocrResp); err != nil {

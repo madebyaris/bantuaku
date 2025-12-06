@@ -120,12 +120,6 @@ func (c *Client) CreateChatCompletion(ctx context.Context, req ChatCompletionReq
 	// OpenRouter requires HTTP-Referer header for some models
 	httpReq.Header.Set("HTTP-Referer", "https://bantuaku.ai")
 
-	// Log request details for debugging
-	fmt.Printf("[OpenRouter Chat] Request URL: %s\n", url)
-	fmt.Printf("[OpenRouter Chat] Request Body Length: %d bytes\n", len(reqBody))
-	fmt.Printf("[OpenRouter Chat] Request Body: %s\n", string(reqBody))
-	// DO NOT log API keys. Indicate the Authorization header is set, without value.
-	fmt.Printf("[OpenRouter Chat] Authorization Header: Bearer [REDACTED]\n")
 
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
@@ -139,13 +133,8 @@ func (c *Client) CreateChatCompletion(ctx context.Context, req ChatCompletionReq
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("[OpenRouter Chat] Error Response Status: %d\n", resp.StatusCode)
-		fmt.Printf("[OpenRouter Chat] Error Response Body: %s\n", string(bodyBytes))
 		return nil, fmt.Errorf("API error: %d - %s", resp.StatusCode, string(bodyBytes))
 	}
-
-	fmt.Printf("[OpenRouter Chat] Success Response Status: %d\n", resp.StatusCode)
-	fmt.Printf("[OpenRouter Chat] Response Body Length: %d bytes\n", len(bodyBytes))
 
 	var chatResp ChatCompletionResponse
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {

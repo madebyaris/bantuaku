@@ -2,9 +2,7 @@ package admin
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"os"
 
 	"github.com/bantuaku/backend/errors"
 	"github.com/bantuaku/backend/logger"
@@ -16,31 +14,10 @@ func (h *AdminHandler) GetAIProvider(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logger.With("request_id", r.Context().Value("request_id"))
 
-	// #region agent log
-	if f, err := os.OpenFile("/Volumes/app/hackathon/imphxkolosal/bantuaku/.cursor/debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-		fmt.Fprintf(f, `{"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"admin/settings.go:GetAIProvider:entry","message":"GetAIProvider handler called","data":{"dbNil":%t},"timestamp":%d}`+"\n", h.db == nil, 0)
-		f.Close()
-	}
-	// #endregion
 	settingsService := settings.NewService(h.db)
 	settingValue, err := settingsService.GetSetting(ctx, "ai_provider")
-	// #region agent log
-	if f, err2 := os.OpenFile("/Volumes/app/hackathon/imphxkolosal/bantuaku/.cursor/debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err2 == nil {
-		errorMsg := ""
-		if err != nil {
-			errorMsg = err.Error()
-		}
-		fmt.Fprintf(f, `{"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"admin/settings.go:GetAIProvider:afterGetSetting","message":"After GetSetting call","data":{"settingValue":"%s","error":%t,"errorMsg":"%s"},"timestamp":%d}`+"\n", settingValue, err != nil, errorMsg, 0)
-		f.Close()
-	}
-	// #endregion
+
 	if err != nil {
-		// #region agent log
-		if f, err2 := os.OpenFile("/Volumes/app/hackathon/imphxkolosal/bantuaku/.cursor/debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err2 == nil {
-			fmt.Fprintf(f, `{"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"admin/settings.go:GetAIProvider:error","message":"GetSetting returned error","data":{"error":"%s"},"timestamp":%d}`+"\n", err.Error(), 0)
-			f.Close()
-		}
-		// #endregion
 		log.Error("Failed to get AI provider setting", "error", err)
 		// Check if error is about missing table - provide helpful message
 		if err != nil && (err.Error() != "" && (err.Error() == "relation \"settings\" does not exist" || err.Error() == "failed to query setting: relation \"settings\" does not exist")) {

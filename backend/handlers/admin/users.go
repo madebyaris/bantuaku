@@ -3,9 +3,7 @@ package admin
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -59,21 +57,9 @@ type AdminStats struct {
 func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// #region agent log
-	if f, err := os.OpenFile("/Volumes/app/hackathon/imphxkolosal/bantuaku/.cursor/debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-		fmt.Fprintf(f, `{"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"admin/users.go:GetStats:entry","message":"GetStats handler called","data":{"dbNil":%t},"timestamp":%d}`+"\n", h.db == nil, 0)
-		f.Close()
-	}
-	// #endregion
 	var stats AdminStats
 
 	if err := h.db.Pool().QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&stats.TotalUsers); err != nil {
-		// #region agent log
-		if f, err2 := os.OpenFile("/Volumes/app/hackathon/imphxkolosal/bantuaku/.cursor/debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err2 == nil {
-			fmt.Fprintf(f, `{"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"admin/users.go:GetStats:queryError","message":"Query users failed","data":{"error":"%s"},"timestamp":%d}`+"\n", err.Error(), 0)
-			f.Close()
-		}
-		// #endregion
 		appErr := errors.NewDatabaseError(err, "count users")
 		h.respondError(w, appErr, r)
 		return

@@ -376,7 +376,6 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 			"model", model,
 			"message_length", len(req.Message),
 			"conversation_id", req.ConversationID,
-			"user_message", req.Message,
 			"tools_count", len(chatTools),
 			"total_messages", len(messages))
 
@@ -663,10 +662,19 @@ func (h *Handler) GetConversations(w http.ResponseWriter, r *http.Request) {
 // GetMessages retrieves messages for a conversation
 func (h *Handler) GetMessages(w http.ResponseWriter, r *http.Request) {
 	log := logger.With("request_id", r.Context().Value("request_id"))
+	ctx := r.Context()
 	conversationID := r.URL.Query().Get("conversation_id")
+	companyID := middleware.GetCompanyID(ctx)
 
 	if conversationID == "" {
 		h.respondError(w, errors.NewValidationError("conversation_id is required", ""), r)
+		return
+	}
+
+	// Verify conversation belongs to user's company
+	var convCompanyID string
+	if err := h.db.Pool().QueryRow(ctx, `SELECT company_id FROM conversations WHERE id = $1`, conversationID).Scan(&convCompanyID); err != nil || convCompanyID != companyID {
+		h.respondError(w, errors.NewAppError(errors.ErrCodeForbidden, "Access denied to conversation", ""), r)
 		return
 	}
 
@@ -685,7 +693,6 @@ func (h *Handler) GetMessages(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	ctx := r.Context()
 	rows, err := h.db.Pool().Query(ctx, `
 		SELECT id, conversation_id, sender, content, structured_payload, file_upload_id, created_at
 		FROM messages

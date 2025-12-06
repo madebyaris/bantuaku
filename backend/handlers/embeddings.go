@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/bantuaku/backend/errors"
 	"github.com/bantuaku/backend/logger"
@@ -32,9 +34,11 @@ func (h *Handler) IndexChunks(w http.ResponseWriter, r *http.Request) {
 	// Create indexer
 	indexer := embedding.NewIndexer(h.db.Pool(), embedder)
 
-	// Run indexing in goroutine
+	// Run indexing in goroutine with detached context (request context will be cancelled)
 	go func() {
-		ctx := r.Context()
+		// Use background context with timeout since request context will be cancelled
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
 		count, err := indexer.IndexChunks(ctx, limit)
 		if err != nil {
 			log.Error("Indexing failed", "error", err)
